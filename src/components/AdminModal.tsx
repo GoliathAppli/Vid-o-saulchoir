@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { SyncConfig, VideoItem, SyncLogEntry } from '../types/cinema';
 import { storageService } from '../services/storageService';
 import { syncManager } from '../services/syncManager';
-import { youtubeService, extractYouTubeId } from '../services/youtubeService';
+import { youtubeService, extractYouTubeId, extractPlaylistId } from '../services/youtubeService';
 import { githubService } from '../services/githubService';
 import {
   Lock, KeyRound, Shield, CheckCircle2, AlertCircle, RefreshCw,
@@ -118,12 +118,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Save config
-  const handleSaveConfig = (e?: React.FormEvent) => {
+  // Save config and immediately synchronize
+  const handleSaveConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    storageService.saveConfig(config);
+    const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId);
+    const normalizedConfig: SyncConfig = {
+      ...config,
+      youtubeApiKey: config.youtubeApiKey.trim(),
+      youtubePlaylistId: cleanPlaylistId,
+      autoSyncEnabled: true,
+    };
+    setConfig(normalizedConfig);
+    storageService.saveConfig(normalizedConfig);
     setConfigSavedToast(true);
     setTimeout(() => setConfigSavedToast(false), 2500);
+
+    // Automatically trigger synchronization as soon as API/Playlist or GitHub data is saved
+    if ((normalizedConfig.youtubeApiKey && normalizedConfig.youtubePlaylistId) || (normalizedConfig.githubOwner && normalizedConfig.githubRepo)) {
+      setIsSyncing(true);
+      setSyncStatusMsg('Synchronisation automatique de la playlist en cours...');
+      const result = await syncManager.runFullSync(normalizedConfig);
+      setIsSyncing(false);
+      setSyncStatusMsg(result.message);
+      setSyncLogs(storageService.getLogs());
+      onCatalogUpdated(result.videos);
+    }
   };
 
   // Test YouTube connection
@@ -542,12 +561,32 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                     <button
                       onClick={() => handleSaveConfig()}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow"
+                      disabled={isSyncing}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow disabled:opacity-60"
                     >
-                      {configSavedToast ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                      <span>{configSavedToast ? 'Enregistré !' : 'Enregistrer les réglages'}</span>
+                      {isSyncing ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : configSavedToast ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {isSyncing
+                          ? 'Synchronisation...'
+                          : configSavedToast
+                          ? 'Synchronisé !'
+                          : 'Enregistrer et synchroniser'}
+                      </span>
                     </button>
                   </div>
+
+                  {syncStatusMsg && (
+                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-200 flex items-center gap-2.5">
+                      <RefreshCw className={`w-4 h-4 text-amber-400 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+                      <span>{syncStatusMsg}</span>
+                    </div>
+                  )}
 
                   {/* YouTube Section */}
                   <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5 space-y-4">
@@ -597,17 +636,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                       <div>
                         <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          ID de la Playlist YouTube (Recommandé)
+                          Lien ou ID de la Playlist YouTube *
                         </label>
                         <input
                           type="text"
                           value={config.youtubePlaylistId}
-                          onChange={e => setConfig({ ...config, youtubePlaylistId: e.target.value })}
-                          placeholder="PL..."
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                          onChange={e => setConfig({ ...config, youtubePlaylistId: extractPlaylistId(e.target.value) })}
+                          placeholder="Collez le lien complet https://youtube.com/playlist?list=PL... ou l'ID PL..."
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
                         />
                         <p className="text-[11px] text-zinc-500 mt-1">
-                          <strong>Essentiel pour vidéos non répertoriées :</strong> regroupez-les dans une playlist et renseignez son ID ici.
+                          Vous pouvez coller directement le lien complet de votre playlist : l'identifiant (ex: <code>PLc1MoYNc9HeM</code>) est extrait automatiquement.
                         </p>
                       </div>
                     </div>
@@ -729,10 +768,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <div className="flex justify-end">
                     <button
                       onClick={() => handleSaveConfig()}
-                      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors flex items-center gap-2 cursor-pointer shadow-lg"
+                      disabled={isSyncing}
+                      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-60"
                     >
-                      <Save className="w-4 h-4" />
-                      <span>Enregistrer et automatiser</span>
+                      {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      <span>{isSyncing ? 'Synchronisation en cours...' : 'Enregistrer et synchroniser maintenant'}</span>
                     </button>
                   </div>
                 </div>
@@ -1276,26 +1316,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Reset Factory Demo */}
+                  {/* Clear local catalog */}
                   <div className="p-5 bg-red-950/20 border border-red-900/30 rounded-xl flex items-center justify-between">
                     <div>
                       <div className="text-sm font-medium text-red-200">
-                        Réinitialiser le Catalogue de Démonstration
+                        Vider le Catalogue Local
                       </div>
                       <p className="text-xs text-zinc-400 mt-0.5">
-                        Restaure les films d'exemple originaux de l'Atelier Cinéma du Saulchoir.
+                        Efface les vidéos en cache localement avant une nouvelle synchronisation propre.
                       </p>
                     </div>
                     <button
                       onClick={() => {
-                        if (confirm('Réinitialiser aux vidéos par défaut ? Les ajouts non sauvegardés sur GitHub seront perdus.')) {
+                        if (confirm('Vider toutes les vidéos du cache local ? Vous pourrez relancer la synchronisation depuis YouTube ou GitHub à tout moment.')) {
                           const res = storageService.resetCatalog();
                           onCatalogUpdated(res);
                         }
                       }}
                       className="px-3.5 py-1.5 bg-red-900/40 hover:bg-red-900/60 text-red-300 text-xs rounded border border-red-800/50 transition-colors cursor-pointer"
                     >
-                      Réinitialiser
+                      Vider le cache
                     </button>
                   </div>
                 </div>

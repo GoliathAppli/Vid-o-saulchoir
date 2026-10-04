@@ -12,6 +12,7 @@ interface HeroFeaturedVideoProps {
   onSelectVideo: (video: VideoItem) => void;
   isAdmin: boolean;
   onEditVideo?: (video: VideoItem) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
@@ -19,15 +20,40 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
   onSelectVideo,
   isAdmin,
   onEditVideo,
+  onOpenAdmin,
 }) => {
   const [isPlayingInline, setIsPlayingInline] = useState(false);
   const [copied, setCopied] = useState(false);
 
   if (!video) {
     return (
-      <section id="nouvelle-publication" className="py-20 text-center text-zinc-500">
-        <Film className="w-12 h-12 mx-auto mb-4 opacity-40" />
-        <p className="font-serif-cinema text-xl text-zinc-400">Aucun film répertorié pour le moment.</p>
+      <section id="nouvelle-publication" className="py-24 border-b border-white/5">
+        <div className="max-w-2xl mx-auto px-4 text-center space-y-5">
+          <div className="w-14 h-14 mx-auto rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-amber-400/80">
+            <Film className="w-6 h-6" />
+          </div>
+          <div className="space-y-2">
+            <span className="text-xs uppercase tracking-widest text-amber-400/90 font-semibold">
+              Nouvelle publication
+            </span>
+            <h1 className="font-serif-cinema text-3xl text-zinc-100 font-semibold">
+              En attente de synchronisation YouTube
+            </h1>
+            <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
+              Aucune vidéo d'exemple n'est affichée. Renseignez votre clé API YouTube et le lien ou l'identifiant de votre playlist dans l'espace administrateur pour synchroniser automatiquement vos vidéos.
+            </p>
+          </div>
+          {onOpenAdmin && (
+            <div className="pt-2">
+              <button
+                onClick={onOpenAdmin}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors cursor-pointer shadow-lg shadow-amber-950/30"
+              >
+                Configurer l'API et la Playlist dans l'Espace Administrateur
+              </button>
+            </div>
+          )}
+        </div>
       </section>
     );
   }

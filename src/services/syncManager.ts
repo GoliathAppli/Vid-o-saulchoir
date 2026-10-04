@@ -5,7 +5,7 @@
 
 import { VideoItem, SyncConfig } from '../types/cinema';
 import { storageService } from './storageService';
-import { youtubeService, extractYouTubeId } from './youtubeService';
+import { youtubeService, extractYouTubeId, extractPlaylistId } from './youtubeService';
 import { githubService } from './githubService';
 
 export const syncManager = {
@@ -24,55 +24,76 @@ export const syncManager = {
   }> {
     let currentVideos = storageService.getVideos();
     let newItemsCount = 0;
+    let hasError = false;
     const actionsTaken: string[] = [];
 
+    const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId || '');
+
     try {
+      // 0. If local catalog is empty and GitHub repo is configured, try pulling existing catalog from GitHub first
+      if (currentVideos.length === 0 && config.githubOwner && config.githubRepo) {
+        try {
+          const ghPull = await githubService.pullVideos(
+            config.githubToken,
+            config.githubOwner,
+            config.githubRepo,
+            config.githubBranch || 'main',
+            config.githubFilePath || 'data/videos.json'
+          );
+          if (ghPull.videos && ghPull.videos.length > 0) {
+            currentVideos = ghPull.videos;
+            actionsTaken.push(`${ghPull.videos.length} vidéo(s) chargée(s) depuis GitHub`);
+          }
+        } catch {
+          // File may not exist yet on GitHub, ignore
+        }
+      }
+
       // 1. YouTube Sync
-      if (config.youtubeApiKey && config.youtubePlaylistId) {
+      if ((config.youtubeApiKey || config.youtubeAccessToken) && cleanPlaylistId) {
         try {
           const ytVideos = await youtubeService.fetchPlaylistVideos(
-            config.youtubePlaylistId,
+            cleanPlaylistId,
             config.youtubeApiKey,
             config.youtubeAccessToken
           );
 
-          if (ytVideos.length > 0) {
-            const existingMap = new Map<string, VideoItem>();
-            for (const v of currentVideos) {
-              existingMap.set(v.id, v);
-            }
-
-            for (const yt of ytVideos) {
-              if (!existingMap.has(yt.id)) {
-                // Brand new video found!
-                newItemsCount++;
-                currentVideos.unshift(yt);
-              } else {
-                // Update existing without losing manual synopsis/notes
-                const existing = existingMap.get(yt.id)!;
-                existing.title = yt.title || existing.title;
-                existing.publishedAt = yt.publishedAt || existing.publishedAt;
-                existing.thumbnailUrl = yt.thumbnailUrl || existing.thumbnailUrl;
-                existing.duration = yt.duration || existing.duration;
-              }
-            }
-
-            actionsTaken.push(`${ytVideos.length} vidéo(s) synchronisée(s) depuis YouTube`);
-            storageService.addLog({
-              source: 'youtube',
-              status: 'success',
-              message: `Synchronisation YouTube réussie (${ytVideos.length} vidéo(s) récupérée(s), ${newItemsCount} nouvelle(s)).`,
-              itemCount: ytVideos.length,
-            });
+          const existingMap = new Map<string, VideoItem>();
+          for (const v of currentVideos) {
+            existingMap.set(v.id, v);
           }
+
+          for (const yt of ytVideos) {
+            if (!existingMap.has(yt.id)) {
+              newItemsCount++;
+              currentVideos.unshift(yt);
+            } else {
+              // Update existing without losing manual synopsis/notes
+              const existing = existingMap.get(yt.id)!;
+              existing.title = yt.title || existing.title;
+              existing.publishedAt = yt.publishedAt || existing.publishedAt;
+              existing.thumbnailUrl = yt.thumbnailUrl || existing.thumbnailUrl;
+              existing.duration = yt.duration || existing.duration;
+              existing.isUnlisted = yt.isUnlisted;
+            }
+          }
+
+          actionsTaken.push(`${ytVideos.length} vidéo(s) synchronisée(s) depuis la playlist YouTube (${newItemsCount} nouvelle(s))`);
+          storageService.addLog({
+            source: 'youtube',
+            status: 'success',
+            message: `Synchronisation YouTube réussie (${ytVideos.length} vidéo(s) récupérée(s), ${newItemsCount} nouvelle(s)).`,
+            itemCount: ytVideos.length,
+          });
         } catch (ytErr) {
+          hasError = true;
           const errMsg = ytErr instanceof Error ? ytErr.message : 'Erreur inconnue YouTube';
           storageService.addLog({
             source: 'youtube',
-            status: 'warning',
-            message: `Avertissement YouTube : ${errMsg}`,
+            status: 'error',
+            message: `Erreur YouTube : ${errMsg}`,
           });
-          actionsTaken.push(`Échec partiel YouTube : ${errMsg}`);
+          actionsTaken.push(`Échec YouTube : ${errMsg}`);
         }
       }
 
@@ -85,7 +106,7 @@ export const syncManager = {
       storageService.saveVideos(currentVideos);
 
       // 3. GitHub Sync (push latest state to repo)
-      if (config.githubToken && config.githubOwner && config.githubRepo) {
+      if (config.githubToken && config.githubOwner && config.githubRepo && currentVideos.length > 0) {
         try {
           const commitMsg = newItemsCount > 0
             ? `Sync auto : ${newItemsCount} nouvelle(s) vidéo(s) ajoutée(s) (${new Date().toLocaleDateString('fr-FR')})`
@@ -111,6 +132,7 @@ export const syncManager = {
             });
           }
         } catch (ghErr) {
+          hasError = true;
           const errMsg = ghErr instanceof Error ? ghErr.message : 'Erreur inconnue GitHub';
           storageService.addLog({
             source: 'github',
@@ -123,18 +145,19 @@ export const syncManager = {
 
       const summary = actionsTaken.length > 0
         ? actionsTaken.join(' · ')
-        : 'Catalogue local à jour (aucun service distant configuré).';
+        : 'Veuillez renseigner la Clé API YouTube et la Playlist (ou le dépôt GitHub) pour synchroniser.';
 
       const updatedConfig: SyncConfig = {
         ...config,
+        youtubePlaylistId: cleanPlaylistId || config.youtubePlaylistId,
         lastSyncTimestamp: new Date().toISOString(),
-        lastSyncStatus: 'success',
+        lastSyncStatus: hasError ? 'error' : 'success',
         lastSyncMessage: summary,
       };
       storageService.saveConfig(updatedConfig);
 
       return {
-        success: true,
+        success: !hasError && actionsTaken.length > 0,
         message: summary,
         videos: currentVideos,
         newCount: newItemsCount,

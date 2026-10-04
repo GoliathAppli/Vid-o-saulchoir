@@ -46,19 +46,30 @@ export default function App() {
     setIsAdminModalOpen(true);
   };
 
-  // Background auto-sync if configured
+  // Auto-sync immediately on mount if API/Playlist or GitHub are configured, plus background interval
   useEffect(() => {
-    const config = storageService.getConfig();
-    if (!config.autoSyncEnabled || !config.youtubeApiKey) return;
+    const runAutoSync = () => {
+      const currentConfig = storageService.getConfig();
+      const hasYouTube = Boolean(currentConfig.youtubeApiKey && currentConfig.youtubePlaylistId);
+      const hasGitHub = Boolean(currentConfig.githubOwner && currentConfig.githubRepo);
 
-    const intervalMs = Math.max(15, config.autoSyncIntervalMinutes || 60) * 60 * 1000;
-    const timer = setInterval(() => {
-      syncManager.runFullSync(config).then(res => {
-        if (res.success && res.newCount > 0) {
+      if (!hasYouTube && !hasGitHub) return;
+
+      syncManager.runFullSync(currentConfig).then(res => {
+        if (res.videos) {
           setVideos(res.videos);
         }
       });
-    }, intervalMs);
+    };
+
+    // Run once immediately on load
+    runAutoSync();
+
+    const config = storageService.getConfig();
+    if (!config.autoSyncEnabled) return;
+
+    const intervalMs = Math.max(5, config.autoSyncIntervalMinutes || 15) * 60 * 1000;
+    const timer = setInterval(runAutoSync, intervalMs);
 
     return () => clearInterval(timer);
   }, []);
@@ -81,6 +92,7 @@ export default function App() {
           onSelectVideo={video => setSelectedVideoModal(video)}
           isAdmin={isAdmin}
           onEditVideo={handleEditVideo}
+          onOpenAdmin={() => setIsAdminModalOpen(true)}
         />
 
         {/* Section 2: "Archives" grouped chronologically by Year (Année) and Month (Mois) */}

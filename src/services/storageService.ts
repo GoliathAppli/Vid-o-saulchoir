@@ -6,135 +6,12 @@
 import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup } from '../types/cinema';
 
 const STORAGE_KEYS = {
-  VIDEOS: 'atelier_cinema_videos_catalog',
+  LEGACY_VIDEOS: 'atelier_cinema_videos_catalog',
+  VIDEOS: 'atelier_cinema_videos_v2',
   CONFIG: 'atelier_cinema_sync_config',
   LOGS: 'atelier_cinema_sync_logs',
   ADMIN_SESSION: 'atelier_cinema_admin_auth',
 };
-
-// Initial realistic catalog of the Atelier Cinéma du Saulchoir
-const INITIAL_VIDEOS: VideoItem[] = [
-  {
-    id: 'L_LUpnjgPso',
-    title: 'Lumières d\'Automne au Cloître',
-    description: 'Exercice de mise en scène en lumière naturelle et son multipiste réalisé lors de la session de rentrée 2026 au Saulchoir.',
-    synopsis: 'Dans le silence minéral des galeries du Saulchoir, une monteuse cherche la cadence d\'un plan oublié. Une réflexion poétique sur la mémoire du lieu et la texture du temps cinématographique.',
-    publishedAt: '2026-09-22T18:30:00Z', // Latest! "Nouvelle publication"
-    thumbnailUrl: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=L_LUpnjgPso',
-    isUnlisted: true,
-    duration: '11:42',
-    director: 'Atelier de Création · Promo 2026',
-    genre: 'Court-métrage',
-    tags: ['Fiction', 'Lumière naturelle', 'Saulchoir', 'Non répertorié'],
-    technicalNotes: 'Caméra Cinema 4K · Format 1.85:1 · Prise de son ambiophonique Schœps',
-  },
-  {
-    id: 'aqz-KE-bpKQ',
-    title: 'Le Geste et la Bobine : Écouter le 35mm',
-    description: 'Documentaire de recherche sur les gestes du montage argentique et la conservation des archives filmiques.',
-    synopsis: 'Rencontre avec les artisans de la pellicule qui perpétuent les techniques de colleuse et de visionneuse Steenbeck. Le grain de l\'argentique confronté aux flux numériques contemporains.',
-    publishedAt: '2026-08-14T14:15:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
-    isUnlisted: true,
-    duration: '18:05',
-    director: 'Collectif Documentaire du Saulchoir',
-    genre: 'Documentaire',
-    tags: ['Documentaire', 'Pellicule', 'Archives', 'Patrimoine'],
-    technicalNotes: 'Pellicule Kodak Vision3 250D numérisée en 4K HDR',
-  },
-  {
-    id: 'jNQXAC9IVRw',
-    title: 'Chambre Noire & Regards Croisés',
-    description: 'Étude pratique sur le cadrage fixe et le hors-champ menée en collaboration avec les étudiants en scénographie.',
-    synopsis: 'Trois personnages se succèdent dans un même décor clos. Tout se joue sur la direction du regard et la composition millimétrée des ombres portées.',
-    publishedAt: '2026-05-09T10:00:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-    isUnlisted: false,
-    duration: '09:12',
-    director: 'Groupe Atelier Fictions',
-    genre: 'Atelier & Exercice',
-    tags: ['Exercice', 'Cadrage', 'Hors-champ', 'Noir & Blanc'],
-    technicalNotes: 'Format 1.33:1 académique · Noir & Blanc contrasté',
-  },
-  {
-    id: 'kJQP7kiw5Fk',
-    title: 'Échos de la Ville Haute',
-    description: 'Symphonie urbaine et captation sonore des résonances architecturales de la cité.',
-    synopsis: 'Inspiré des symphonies de villes des années 1920 (Ruttmann, Vertov), un parcours visuel rythmé par les pulsations du bitume et les reflets du crépuscule.',
-    publishedAt: '2026-03-18T17:45:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=kJQP7kiw5Fk',
-    isUnlisted: true,
-    duration: '13:20',
-    director: 'Atelier Son & Image',
-    genre: 'Cinéma expérimental',
-    tags: ['Expérimental', 'Urbain', 'Montage rythmique'],
-    technicalNotes: 'Optiques anamorphiques · Mixage 5.1',
-  },
-  {
-    id: '9bZkp7q19f0',
-    title: 'Masterclass : Le Temps Suspendu au Cinéma',
-    description: 'Transcription audiovisuelle de la rencontre annuelle avec les cinéastes invités au Saulchoir.',
-    synopsis: 'Débat et analyse critique autour de la durée du plan chez Chantal Akerman et Andreï Tarkovski. Avec extraits commentés et échanges avec la salle.',
-    publishedAt: '2025-11-28T19:00:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=9bZkp7q19f0',
-    isUnlisted: false,
-    duration: '42:10',
-    director: 'Conférences du Saulchoir',
-    genre: 'Masterclass & Rencontre',
-    tags: ['Masterclass', 'Théorie du cinéma', 'Débat'],
-    technicalNotes: 'Captation bi-caméra · Son cravate HF',
-  },
-  {
-    id: 'M7lc1UVf-VE',
-    title: 'Les Fenêtres Intérieures',
-    description: 'Court-métrage intimiste tourné en décor naturel dans la bibliothèque historique.',
-    synopsis: 'Entre deux rayonnages de livres centenaires, un étudiant découvre des annotations manuscrites sur une partition cinématographique inachevée.',
-    publishedAt: '2025-10-04T15:20:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=M7lc1UVf-VE',
-    isUnlisted: true,
-    duration: '15:50',
-    director: 'Équipe Fiction Promo 2025',
-    genre: 'Court-métrage',
-    tags: ['Fiction', 'Lieu historique', 'Non répertorié'],
-    technicalNotes: 'Optiques Zeiss Master Prime · Étalonnage DaVinci',
-  },
-  {
-    id: 'fJ9rUzIMcZQ',
-    title: 'Territoires Flous : Essai sur le Paysage',
-    description: 'Une déambulation en lisière forestière explorant les lisières géographiques et intimes.',
-    synopsis: 'Poème visuel composé à partir de plans séquences lents au lever du jour. La voix off égraine des fragments de correspondances de cinéastes.',
-    publishedAt: '2025-04-12T09:30:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=fJ9rUzIMcZQ',
-    isUnlisted: true,
-    duration: '12:08',
-    director: 'Atelier Écriture & Réalisation',
-    genre: 'Documentaire',
-    tags: ['Essai', 'Paysage', 'Plan séquence'],
-    technicalNotes: 'Format 2.39:1 Scope · Voix off studio',
-  },
-  {
-    id: 'ZbZSe6N_BXs',
-    title: 'Exercice Premier Plan : Arrivée en Gare',
-    description: 'Hommage contemporain au film fondateur des frères Lumière réinterprété avec les outils actuels.',
-    synopsis: 'Revisitation contemporaine du dispositif originel : comment la caméra transforme-t-elle l\'espace public en scène théâtrale involontaire ?',
-    publishedAt: '2024-12-10T16:00:00Z',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=1200&q=80',
-    youtubeUrl: 'https://www.youtube.com/watch?v=ZbZSe6N_BXs',
-    isUnlisted: false,
-    duration: '06:45',
-    director: 'Atelier Initiation Technique',
-    genre: 'Atelier & Exercice',
-    tags: ['Exercice', 'Histoire du cinéma', 'Lumière'],
-    technicalNotes: 'Plan fixe 50mm · Son direct mono',
-  }
-];
 
 const DEFAULT_CONFIG: SyncConfig = {
   youtubeApiKey: '',
@@ -142,15 +19,15 @@ const DEFAULT_CONFIG: SyncConfig = {
   youtubeChannelId: '',
   youtubeAccessToken: '',
   githubToken: '',
-  githubOwner: 'atelier-cinema-saulchoir',
-  githubRepo: 'cinema-catalog',
+  githubOwner: '',
+  githubRepo: '',
   githubBranch: 'main',
   githubFilePath: 'data/videos.json',
-  autoSyncEnabled: false,
-  autoSyncIntervalMinutes: 60,
+  autoSyncEnabled: true,
+  autoSyncIntervalMinutes: 15,
   lastSyncTimestamp: undefined,
   lastSyncStatus: 'idle',
-  lastSyncMessage: 'Système initialisé. Prêt pour la synchronisation.',
+  lastSyncMessage: 'En attente des paramètres API YouTube / GitHub.',
 };
 
 const FRENCH_MONTHS = [
@@ -161,19 +38,22 @@ const FRENCH_MONTHS = [
 export const storageService = {
   getVideos(): VideoItem[] {
     try {
+      // Purge legacy sample catalog if present
+      if (localStorage.getItem(STORAGE_KEYS.LEGACY_VIDEOS)) {
+        localStorage.removeItem(STORAGE_KEYS.LEGACY_VIDEOS);
+      }
+
       const stored = localStorage.getItem(STORAGE_KEYS.VIDEOS);
       if (stored) {
         const parsed: VideoItem[] = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
     } catch (e) {
       console.error('Erreur lecture vidéos locales', e);
     }
-    // Save defaults
-    this.saveVideos(INITIAL_VIDEOS);
-    return INITIAL_VIDEOS;
+    return [];
   },
 
   saveVideos(videos: VideoItem[]): void {
@@ -217,16 +97,7 @@ export const storageService = {
     } catch (e) {
       console.error('Erreur lecture logs', e);
     }
-    return [
-      {
-        id: 'init-1',
-        timestamp: new Date().toISOString(),
-        source: 'system',
-        status: 'info',
-        message: 'Atelier Cinéma du Saulchoir : catalogue initial chargé avec succès.',
-        itemCount: INITIAL_VIDEOS.length
-      }
-    ];
+    return [];
   },
 
   addLog(entry: Omit<SyncLogEntry, 'id' | 'timestamp'>): void {
@@ -248,10 +119,11 @@ export const storageService = {
     localStorage.removeItem(STORAGE_KEYS.LOGS);
   },
 
-  // Reset to initial sample data
+  // Clear local catalog completely
   resetCatalog(): VideoItem[] {
+    localStorage.removeItem(STORAGE_KEYS.LEGACY_VIDEOS);
     localStorage.removeItem(STORAGE_KEYS.VIDEOS);
-    return this.getVideos();
+    return [];
   },
 
   /**
