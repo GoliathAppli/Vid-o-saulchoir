@@ -1,0 +1,7 @@
+{
+  "name": "Atelier Cinéma du Saulchoir",
+  "description": "Plateforme cinématographique de l'Atelier Cinéma du Saulchoir avec synchronisation automatique YouTube et GitHub, espace administrateur et archives chronologiques.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
