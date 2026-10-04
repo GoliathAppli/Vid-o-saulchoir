@@ -50,7 +50,10 @@ export default function App() {
   useEffect(() => {
     const runAutoSync = () => {
       const currentConfig = storageService.getConfig();
-      const hasYouTube = Boolean(currentConfig.youtubeApiKey && currentConfig.youtubePlaylistId);
+      const hasYouTube = Boolean(
+        currentConfig.youtubeAccessToken ||
+        (currentConfig.youtubeApiKey && currentConfig.youtubePlaylistId)
+      );
       const hasGitHub = Boolean(currentConfig.githubOwner && currentConfig.githubRepo);
 
       if (!hasYouTube && !hasGitHub) return;

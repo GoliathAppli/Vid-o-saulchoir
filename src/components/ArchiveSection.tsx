@@ -102,34 +102,8 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
   );
 
   return (
-    <section id="archives" className="py-16 sm:py-24">
+    <section id="archives" className="py-10 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 border-b border-white/5 pb-8">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-amber-400/90 font-medium mb-2 flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5" />
-              Archives Chronologiques
-            </div>
-            <h2 className="font-serif-cinema text-3xl sm:text-4xl text-zinc-100 font-semibold tracking-tight">
-              Fonds Audiovisuel & Productions
-            </h2>
-            <p className="text-sm text-zinc-400 mt-2 max-w-xl">
-              Toutes les œuvres de l'Atelier Cinéma du Saulchoir répertoriées par Année et Mois de diffusion.
-            </p>
-          </div>
-
-          {isAdmin && onAddVideoClick && (
-            <button
-              onClick={onAddVideoClick}
-              className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-xs font-medium transition-colors flex items-center gap-2 self-start md:self-auto cursor-pointer"
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>Ajouter une vidéo (publique ou non répertoriée)</span>
-            </button>
-          )}
-        </div>
 
         {/* Filter Bar: Search + Genre pills (Interactive Filter Controls) */}
         <div className="bg-zinc-950/70 border border-white/5 rounded-lg p-4 mb-12 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
@@ -177,8 +151,12 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
         {filteredArchives.length === 0 ? (
           <div className="text-center py-20 bg-zinc-950/40 rounded-xl border border-dashed border-zinc-800">
             <Film className="w-10 h-10 mx-auto text-zinc-600 mb-3" />
-            <p className="font-serif-cinema text-lg text-zinc-300">Aucun film ne correspond à votre recherche.</p>
-            <p className="text-xs text-zinc-500 mt-1">Essayez de modifier vos filtres ou termes de recherche.</p>
+            <p className="font-cinzel text-lg text-zinc-300">Aucun film archivé à afficher.</p>
+            <p className="text-xs text-zinc-500 mt-1">
+              {searchQuery || selectedGenre !== 'Tous'
+                ? 'Essayez de modifier vos filtres ou termes de recherche.'
+                : 'Les vidéos précédentes apparaîtront ici classées par Année et par Mois.'}
+            </p>
             {(searchQuery || selectedGenre !== 'Tous') && (
               <button
                 onClick={() => {
@@ -199,12 +177,12 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
               return (
                 <div key={yearGroup.year} className="relative">
                   
-                  {/* MAIN SECTION: ANNÉE (Year) */}
+                  {/* MAIN SECTION: ANNÉE (Year) - Centered */}
                   <div
                     onClick={() => toggleYear(yearGroup.year)}
-                    className="flex items-center justify-between py-4 border-b-2 border-amber-500/40 cursor-pointer group select-none mb-8"
+                    className="relative flex flex-col items-center justify-center py-4 border-b-2 border-amber-500/40 cursor-pointer group select-none mb-8 text-center"
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center gap-3">
                       <button className="text-amber-400 group-hover:text-amber-300 transition-colors">
                         {isExpanded ? (
                           <ChevronDown className="w-6 h-6" />
@@ -212,32 +190,35 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                           <ChevronRight className="w-6 h-6" />
                         )}
                       </button>
-                      <h3 className="font-serif-cinema text-3xl sm:text-4xl font-bold text-zinc-100 tracking-tight flex items-baseline gap-3">
-                        <span>Année {yearGroup.year}</span>
+                      <h3 className="font-cinzel text-2xl sm:text-3xl font-bold text-zinc-100 tracking-wider uppercase">
+                        Année {yearGroup.year}
                       </h3>
                     </div>
 
-                    <span className="text-xs font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-white/5">
+                    <span className="mt-1.5 sm:mt-0 sm:absolute sm:right-0 text-xs font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-white/5">
                       {yearGroup.totalVideos} {yearGroup.totalVideos > 1 ? 'œuvres' : 'œuvre'}
                     </span>
                   </div>
 
                   {/* Months inside Year */}
                   {isExpanded && (
-                    <div className="space-y-12 pl-2 sm:pl-4">
+                    <div className="space-y-12">
                       {yearGroup.months.map(monthGroup => (
                         <div key={monthGroup.monthIndex} className="relative">
                           
-                          {/* SUB-SECTION: MOIS (Month) */}
-                          <div className="flex items-center gap-3 mb-6">
-                            <span className="w-2 h-2 rounded-full bg-amber-400/80" />
-                            <h4 className="font-serif-cinema text-xl text-zinc-200 font-medium tracking-wide">
-                              {monthGroup.monthName} {yearGroup.year}
-                            </h4>
-                            <span className="text-xs text-zinc-500">
-                              ({monthGroup.videos.length})
-                            </span>
-                            <div className="flex-1 h-px bg-white/5 ml-2" />
+                          {/* SUB-SECTION: MOIS (Month) - Centered */}
+                          <div className="flex items-center justify-center gap-3 mb-6">
+                            <div className="flex-1 h-px bg-gradient-to-r from-transparent to-amber-500/25" />
+                            <div className="flex items-center gap-2.5 px-3">
+                              <span className="w-2 h-2 rounded-full bg-amber-400/80" />
+                              <h4 className="font-cinzel text-lg sm:text-xl text-amber-100/90 font-semibold tracking-wider uppercase text-center">
+                                {monthGroup.monthName} {yearGroup.year}
+                              </h4>
+                              <span className="text-xs text-zinc-500 font-mono">
+                                ({monthGroup.videos.length})
+                              </span>
+                            </div>
+                            <div className="flex-1 h-px bg-gradient-to-l from-transparent to-amber-500/25" />
                           </div>
 
                           {/* Grid of video cards for this month */}
@@ -255,7 +236,7 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                                 <article
                                   key={video.id}
                                   onClick={() => onSelectVideo(video)}
-                                  className="group bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 rounded-lg overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/50"
+                                  className="group bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 rounded-lg overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/50 text-center"
                                 >
                                   {/* 16:9 Thumbnail container */}
                                   <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
@@ -297,13 +278,13 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                                   <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                                     <div>
                                       {/* Clean unboxed metadata with typographic separators */}
-                                      <div className="flex items-center gap-2 text-xs text-zinc-400 mb-2">
+                                      <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 mb-2">
                                         <span>{video.genre || 'Cinéma'}</span>
                                         <span aria-hidden="true">·</span>
                                         <span>{formattedDate}</span>
                                       </div>
 
-                                      <h5 className="font-serif-cinema text-lg font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors line-clamp-1">
+                                      <h5 className="font-cinzel text-base sm:text-lg font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors line-clamp-1">
                                         {video.title}
                                       </h5>
 
@@ -313,8 +294,8 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                                     </div>
 
                                     {/* Card Footer: Director + Admin action */}
-                                    <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs text-zinc-400">
-                                      <span className="truncate max-w-[180px]">
+                                    <div className="pt-3 border-t border-white/5 flex items-center justify-center gap-2 text-xs text-zinc-400">
+                                      <span className="truncate max-w-[200px]">
                                         {video.director || 'Atelier du Saulchoir'}
                                       </span>
 

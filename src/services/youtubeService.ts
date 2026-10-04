@@ -60,25 +60,126 @@ export function formatDurationISO(isoDuration?: string): string {
   return `${pad(minutes)}:${pad(seconds)}`;
 }
 
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: { access_token?: string; error?: string; error_description?: string }) => void;
+          }) => { requestAccessToken: (options?: { prompt?: string }) => void };
+        };
+      };
+    };
+  }
+}
+
 export const youtubeService = {
   /**
-   * Test API connectivity with Key and/or Playlist ID
+   * Opens the Google OAuth 2.0 popup using the provided OAuth Client ID
+   * and returns a valid YouTube ReadOnly Bearer Access Token.
+   */
+  requestOAuthAccessToken(clientId: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const cleanClientId = clientId.trim();
+      if (!cleanClientId) {
+        reject(new Error('Veuillez renseigner votre ID Client OAuth Google (ex: xxxx.apps.googleusercontent.com).'));
+        return;
+      }
+
+      if (!window.google?.accounts?.oauth2) {
+        reject(new Error('Le module Google OAuth est en cours de chargement. Réessayez dans une seconde.'));
+        return;
+      }
+
+      try {
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: cleanClientId,
+          scope: 'https://www.googleapis.com/auth/youtube.readonly',
+          callback: (response) => {
+            if (response.error) {
+              reject(new Error(response.error_description || response.error));
+            } else if (response.access_token) {
+              resolve(response.access_token);
+            } else {
+              reject(new Error('Aucun jeton OAuth reçu de Google.'));
+            }
+          },
+        });
+
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Erreur lors de l\'initialisation OAuth 2.0'));
+      }
+    });
+  },
+
+  /**
+   * Resolves the authenticated YouTube channel's "uploads" playlist ID via OAuth 2.0
+   */
+  async getAuthenticatedUploadsPlaylistId(accessToken: string): Promise<{
+    uploadsPlaylistId: string;
+    channelTitle: string;
+  }> {
+    const res = await fetch(
+      'https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken.trim()}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Erreur OAuth YouTube HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Aucune chaîne YouTube associée à ce compte Google.');
+    }
+
+    const channel = data.items[0];
+    const uploadsPlaylistId = channel.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploadsPlaylistId) {
+      throw new Error('Impossible de récupérer la playlist des mises en ligne de la chaîne.');
+    }
+
+    return {
+      uploadsPlaylistId,
+      channelTitle: channel.snippet?.title || 'Chaîne YouTube',
+    };
+  },
+
+  /**
+   * Test API connectivity with OAuth Access Token, Playlist ID, and/or API Key
    */
   async testConnection(apiKey: string, playlistId?: string, accessToken?: string): Promise<{
     success: boolean;
     message: string;
     itemCount?: number;
     title?: string;
+    resolvedPlaylistId?: string;
   }> {
     if (!apiKey && !accessToken) {
       return {
         success: false,
-        message: 'Aucune clé d\'API YouTube ni jeton d\'accès renseigné.',
+        message: 'Veuillez connecter votre compte via OAuth 2.0 (ou renseigner un jeton / clé API).',
       };
     }
 
     try {
-      const cleanPlaylistId = playlistId ? extractPlaylistId(playlistId) : '';
+      let cleanPlaylistId = playlistId ? extractPlaylistId(playlistId) : '';
+
+      // If OAuth token is provided and no playlist ID is set, test via the channel's own uploads playlist
+      if (!cleanPlaylistId && accessToken) {
+        const channelInfo = await this.getAuthenticatedUploadsPlaylistId(accessToken);
+        cleanPlaylistId = channelInfo.uploadsPlaylistId;
+      }
+
       if (cleanPlaylistId) {
         let url = `https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&id=${encodeURIComponent(cleanPlaylistId)}`;
         if (apiKey) url += `&key=${encodeURIComponent(apiKey.trim())}`;
@@ -103,9 +204,10 @@ export const youtubeService = {
         const pl = data.items[0];
         return {
           success: true,
-          message: `Connexion établie avec la playlist "${pl.snippet.title}" (${pl.contentDetails?.itemCount ?? 0} vidéo(s)).`,
+          message: `Connexion établie avec "${pl.snippet.title}" (${pl.contentDetails?.itemCount ?? 0} vidéo(s)).`,
           title: pl.snippet.title,
           itemCount: pl.contentDetails?.itemCount ?? 0,
+          resolvedPlaylistId: cleanPlaylistId,
         };
       } else {
         // Test with simple popular search or channel query to verify key
@@ -186,9 +288,16 @@ export const youtubeService = {
     apiKey: string,
     accessToken?: string
   ): Promise<VideoItem[]> {
-    const cleanPlaylistId = extractPlaylistId(playlistId);
+    let cleanPlaylistId = extractPlaylistId(playlistId);
+
+    // If no playlistId was entered, resolve the authenticated YouTube channel's uploads playlist via OAuth
+    if (!cleanPlaylistId && accessToken) {
+      const channelInfo = await this.getAuthenticatedUploadsPlaylistId(accessToken);
+      cleanPlaylistId = channelInfo.uploadsPlaylistId;
+    }
+
     if (!cleanPlaylistId) {
-      throw new Error('Identifiant de playlist YouTube manquant ou invalide.');
+      throw new Error('Identifiant de playlist YouTube manquant ou connexion OAuth non effectuée.');
     }
 
     const videos: VideoItem[] = [];
@@ -256,13 +365,14 @@ export const youtubeService = {
         pageToken = data.nextPageToken || '';
       } while (pageToken);
 
-      // Now attempt to fetch durations for these items in batches of 50
-      if (apiKey && videos.length > 0) {
+      // Now attempt to fetch durations for these items in batches of 50 (works with OAuth token or API key)
+      if ((apiKey || accessToken) && videos.length > 0) {
         try {
           for (let i = 0; i < videos.length; i += 50) {
             const batch = videos.slice(i, i + 50);
             const ids = batch.map(v => v.id).join(',');
-            const durUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,status&id=${ids}&key=${encodeURIComponent(apiKey.trim())}`;
+            let durUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,status&id=${ids}`;
+            if (apiKey) durUrl += `&key=${encodeURIComponent(apiKey.trim())}`;
             const durRes = await fetch(durUrl, { headers });
             if (durRes.ok) {
               const durData = await durRes.json();

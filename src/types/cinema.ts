@@ -21,11 +21,12 @@ export interface VideoItem {
 }
 
 export interface SyncConfig {
-  // YouTube API
+  // YouTube OAuth 2.0 & API
+  youtubeOAuthClientId?: string; // e.g. "123456789-xxxx.apps.googleusercontent.com"
+  youtubeAccessToken?: string; // OAuth 2.0 Bearer token
   youtubeApiKey: string;
-  youtubePlaylistId: string; // Unlisted videos added to a playlist are retrievable via API
+  youtubePlaylistId: string; // Optional if using OAuth (defaults to channel's uploads playlist)
   youtubeChannelId?: string;
-  youtubeAccessToken?: string; // Optional Bearer token for private content
 
   // GitHub Repository
   githubToken: string;

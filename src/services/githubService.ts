@@ -229,18 +229,18 @@ export const githubService = {
   },
 
   /**
-   * Generates a sample GitHub Actions YAML workflow
+   * Generates a GitHub Actions YAML workflow for 24/7 direct channel synchronization (Unlisted + Shorts + Public) without playlists
    */
-  generateWorkflowYaml(playlistId: string, filePath = 'data/videos.json'): string {
-    return `name: Synchronisation YouTube Atelier Cinéma
+  generateWorkflowYaml(filePath = 'public/data/videos.json'): string {
+    return `name: Synchronisation Directe Chaîne YouTube (Sans Playlist)
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Toutes les 6 heures
+    - cron: '0 * * * *' # Toutes les heures
   workflow_dispatch: # Déclenchement manuel depuis GitHub
 
 jobs:
-  sync-youtube:
+  sync-youtube-channel:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -253,25 +253,76 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Synchroniser les vidéos YouTube
+      - name: Synchroniser toutes les vidéos de la chaîne (Publiques, Non répertoriées & Shorts)
         env:
-          YOUTUBE_API_KEY: \${{ secrets.YOUTUBE_API_KEY }}
-          PLAYLIST_ID: '${playlistId || 'VOTRE_PLAYLIST_ID'}'
+          YOUTUBE_CLIENT_ID: \${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: \${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: \${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           FILE_PATH: '${filePath}'
         run: |
-          node -e "
-          const fs = require('fs');
-          const https = require('https');
-          // Script de synchronisation automatique exécuté par GitHub Actions
-          console.log('Synchronisation automatique du catalogue...');
-          "
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+          async function run() {
+            const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: process.env.YOUTUBE_CLIENT_ID,
+                client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                grant_type: "refresh_token",
+              }),
+            });
+            const { access_token } = await tokenRes.json();
+            if (!access_token) throw new Error("Échec authentification OAuth YouTube");
+            const headers = { Authorization: "Bearer " + access_token };
+            const ids = new Set();
+            let pageToken = "";
+            do {
+              const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&maxResults=50&order=date" + (pageToken ? "&pageToken=" + pageToken : "");
+              const res = await fetch(url, { headers });
+              const data = await res.json();
+              for (const it of data.items || []) if (it.id?.videoId) ids.add(it.id.videoId);
+              pageToken = data.nextPageToken || "";
+            } while (pageToken);
+            const allIds = Array.from(ids);
+            const videos = [];
+            for (let i = 0; i < allIds.length; i += 50) {
+              const batch = allIds.slice(i, i + 50).join(",");
+              const dRes = await fetch("https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=" + batch, { headers });
+              const dData = await dRes.json();
+              for (const item of dData.items || []) {
+                if (item.status?.privacyStatus === "private") continue;
+                const s = item.snippet || {};
+                const isUnlisted = item.status?.privacyStatus === "unlisted";
+                videos.push({
+                  id: item.id,
+                  title: s.title || "Sans titre",
+                  description: s.description || "",
+                  synopsis: (s.description || "").slice(0, 350),
+                  publishedAt: s.publishedAt,
+                  thumbnailUrl: s.thumbnails?.maxres?.url || s.thumbnails?.high?.url || ("https://img.youtube.com/vi/" + item.id + "/hqdefault.jpg"),
+                  youtubeUrl: "https://www.youtube.com/watch?v=" + item.id,
+                  isUnlisted,
+                  director: s.channelTitle || "Atelier Cinéma du Saulchoir",
+                  genre: "Court-métrage"
+                });
+              }
+            }
+            videos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+            fs.mkdirSync(path.dirname(process.env.FILE_PATH), { recursive: true });
+            fs.writeFileSync(process.env.FILE_PATH, JSON.stringify(videos, null, 2));
+          }
+          run().catch(e => { console.error(e); process.exit(1); });
+          '
 
       - name: Commit et Push des nouvelles vidéos
         run: |
           git config --global user.name "Atelier Cinema Bot"
           git config --global user.email "bot@atelier-saulchoir.org"
           git add ${filePath}
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync vidéos Atelier Cinéma [skip ci]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync chaîne YouTube Atelier Cinéma" && git push)
 `;
   }
 };

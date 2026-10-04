@@ -40,7 +40,7 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
               En attente de synchronisation YouTube
             </h1>
             <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
-              Aucune vidéo d'exemple n'est affichée. Renseignez votre clé API YouTube et le lien ou l'identifiant de votre playlist dans l'espace administrateur pour synchroniser automatiquement vos vidéos.
+              Aucune vidéo d'exemple n'est affichée. Connectez votre ID Client OAuth 2.0 YouTube dans l'espace administrateur pour synchroniser automatiquement toutes vos vidéos (y compris non répertoriées).
             </p>
           </div>
           {onOpenAdmin && (
@@ -49,7 +49,7 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
                 onClick={onOpenAdmin}
                 className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-medium text-xs rounded transition-colors cursor-pointer shadow-lg shadow-amber-950/30"
               >
-                Configurer l'API et la Playlist dans l'Espace Administrateur
+                Connecter OAuth 2.0 dans l'Espace Administrateur
               </button>
             </div>
           )}
@@ -81,20 +81,15 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Section Header Indicator */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase text-amber-400">
-              <Sparkles className="w-3.5 h-3.5" />
-              Nouvelle publication
-            </span>
-            <span className="text-zinc-600 text-xs">/</span>
-            <span className="text-xs text-zinc-400 font-medium">
-              Dernière mise en ligne
-            </span>
+        {/* Centered Section Header Indicator */}
+        <div className="flex flex-col items-center text-center gap-2 mb-8">
+          <div className="inline-flex items-center gap-2 text-xs font-cinzel font-semibold tracking-[0.25em] uppercase text-amber-400">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Nouvelle Publication</span>
+            <Sparkles className="w-3.5 h-3.5" />
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400">
             <span>{formattedDate}</span>
             {video.isUnlisted && (
               <>
@@ -108,7 +103,7 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
             {isAdmin && onEditVideo && (
               <button
                 onClick={() => onEditVideo(video)}
-                className="ml-3 text-amber-400/90 hover:text-amber-300 underline underline-offset-4 cursor-pointer"
+                className="ml-2 text-amber-400/90 hover:text-amber-300 underline underline-offset-4 cursor-pointer"
               >
                 Éditer ce film
               </button>
@@ -174,18 +169,18 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
           </div>
 
           {/* Film Dossier & Synopsis (4 cols) */}
-          <div className="lg:col-span-4 flex flex-col justify-between h-full space-y-6">
+          <div className="lg:col-span-4 flex flex-col justify-between h-full space-y-6 text-center lg:text-left">
             <div>
-              <div className="text-xs uppercase tracking-wider text-amber-400/90 font-medium mb-2">
+              <div className="text-xs font-cinzel uppercase tracking-widest text-amber-400/90 font-semibold mb-2">
                 {video.director || 'Atelier Cinéma du Saulchoir'}
               </div>
 
-              <h1 className="font-serif-cinema text-3xl sm:text-4xl text-zinc-100 font-semibold tracking-tight leading-tight mb-4 text-balance">
+              <h1 className="font-cinzel text-2xl sm:text-3xl text-zinc-100 font-bold tracking-wide leading-tight mb-4 text-balance">
                 {video.title}
               </h1>
 
               {/* Tags / Metadata inline */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 mb-6">
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 text-xs text-zinc-400 mb-6">
                 <span>{video.genre || 'Cinéma'}</span>
                 <span aria-hidden="true">·</span>
                 <span>{formattedDate}</span>

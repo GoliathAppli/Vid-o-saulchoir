@@ -53,6 +53,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // Connection testing states
   const [ytTesting, setYtTesting] = useState(false);
   const [ytTestResult, setYtTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [oauthConnecting, setOauthConnecting] = useState(false);
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
 
   const [ghTesting, setGhTesting] = useState(false);
   const [ghTestResult, setGhTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -124,6 +126,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId);
     const normalizedConfig: SyncConfig = {
       ...config,
+      youtubeOAuthClientId: (config.youtubeOAuthClientId || '').trim(),
+      youtubeAccessToken: (config.youtubeAccessToken || '').trim(),
       youtubeApiKey: config.youtubeApiKey.trim(),
       youtubePlaylistId: cleanPlaylistId,
       autoSyncEnabled: true,
@@ -133,15 +137,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setConfigSavedToast(true);
     setTimeout(() => setConfigSavedToast(false), 2500);
 
-    // Automatically trigger synchronization as soon as API/Playlist or GitHub data is saved
-    if ((normalizedConfig.youtubeApiKey && normalizedConfig.youtubePlaylistId) || (normalizedConfig.githubOwner && normalizedConfig.githubRepo)) {
+    // Automatically trigger synchronization as soon as OAuth/API/Playlist or GitHub data is saved
+    if (
+      normalizedConfig.youtubeAccessToken ||
+      (normalizedConfig.youtubeApiKey && normalizedConfig.youtubePlaylistId) ||
+      (normalizedConfig.githubOwner && normalizedConfig.githubRepo)
+    ) {
       setIsSyncing(true);
-      setSyncStatusMsg('Synchronisation automatique de la playlist en cours...');
+      setSyncStatusMsg('Synchronisation automatique en cours...');
       const result = await syncManager.runFullSync(normalizedConfig);
       setIsSyncing(false);
       setSyncStatusMsg(result.message);
       setSyncLogs(storageService.getLogs());
       onCatalogUpdated(result.videos);
+    }
+  };
+
+  // Connect via Google OAuth 2.0 Client ID and immediately synchronize
+  const handleConnectOAuthAndSync = async () => {
+    setOauthConnecting(true);
+    setYtTestResult(null);
+    try {
+      const accessToken = await youtubeService.requestOAuthAccessToken(
+        config.youtubeOAuthClientId || ''
+      );
+
+      let targetPlaylistId = extractPlaylistId(config.youtubePlaylistId);
+      let channelLabel = '';
+
+      // If no specific playlist was provided, automatically get the channel's own uploads playlist
+      if (!targetPlaylistId) {
+        try {
+          const channelInfo = await youtubeService.getAuthenticatedUploadsPlaylistId(accessToken);
+          targetPlaylistId = channelInfo.uploadsPlaylistId;
+          channelLabel = ` (Chaîne : ${channelInfo.channelTitle})`;
+        } catch {
+          // Keep empty if user wants to specify a playlist manually
+        }
+      }
+
+      const updatedConfig: SyncConfig = {
+        ...config,
+        youtubeOAuthClientId: (config.youtubeOAuthClientId || '').trim(),
+        youtubeAccessToken: accessToken,
+        youtubePlaylistId: targetPlaylistId,
+        autoSyncEnabled: true,
+      };
+
+      setConfig(updatedConfig);
+      storageService.saveConfig(updatedConfig);
+
+      setYtTestResult({
+        success: true,
+        message: `Authentification OAuth 2.0 réussie${channelLabel} ! Synchronisation des vidéos en cours...`,
+      });
+
+      setIsSyncing(true);
+      setSyncStatusMsg('Synchronisation OAuth 2.0 en cours...');
+      const result = await syncManager.runFullSync(updatedConfig);
+      setIsSyncing(false);
+      setSyncStatusMsg(result.message);
+      setSyncLogs(storageService.getLogs());
+      onCatalogUpdated(result.videos);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la connexion OAuth 2.0';
+      setYtTestResult({
+        success: false,
+        message: msg,
+      });
+    } finally {
+      setOauthConnecting(false);
     }
   };
 
@@ -154,6 +219,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       config.youtubePlaylistId,
       config.youtubeAccessToken
     );
+    if (res.success && res.resolvedPlaylistId && !config.youtubePlaylistId) {
+      const updated = { ...config, youtubePlaylistId: res.resolvedPlaylistId };
+      setConfig(updated);
+      storageService.saveConfig(updated);
+    }
     setYtTesting(false);
     setYtTestResult(res);
   };
@@ -588,12 +658,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
                   )}
 
-                  {/* YouTube Section */}
-                  <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5 space-y-4">
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  {/* YouTube OAuth 2.0 Section */}
+                  <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5 space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
                       <div className="flex items-center gap-2 text-zinc-200 font-medium text-sm">
                         <Youtube className="w-4 h-4 text-red-500" />
-                        <span>API YouTube Data v3</span>
+                        <span>Synchronisation YouTube via ID Client OAuth 2.0</span>
+                        {config.youtubeAccessToken && (
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono">
+                            OAuth Connecté
+                          </span>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -602,8 +677,47 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <RefreshCw className={`w-3 h-3 ${ytTesting ? 'animate-spin' : ''}`} />
-                        <span>Tester la connexion YouTube</span>
+                        <span>Tester la connexion</span>
                       </button>
+                    </div>
+
+                    {/* Step-by-step helper for creating the Google OAuth Client ID */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-amber-500/20 text-xs text-zinc-300 space-y-2">
+                      <div className="font-medium text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                        <span>Que mettre dans Google Cloud (« Créer un ID client OAuth ») ?</span>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 text-[11px] text-zinc-400">
+                        <li>
+                          <strong>Type d'application</strong> : choisissez <span className="text-zinc-200 font-medium">Application Web</span>
+                        </li>
+                        <li>
+                          <strong>Nom</strong> : mettez <code className="text-zinc-200">Atelier Cinéma du Saulchoir</code>
+                        </li>
+                        <li className="flex flex-wrap items-center gap-1.5">
+                          <span><strong>Origines JavaScript autorisées</strong> : cliquez sur <em>Ajouter un URI</em> et collez exactement :</span>
+                          <code className="px-2 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-amber-300 font-mono">
+                            {typeof window !== 'undefined' ? window.location.origin : ''}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof window !== 'undefined') {
+                                navigator.clipboard.writeText(window.location.origin);
+                                setCopiedOrigin(true);
+                                setTimeout(() => setCopiedOrigin(false), 2000);
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[10px] flex items-center gap-1 cursor-pointer border border-zinc-700"
+                          >
+                            {copiedOrigin ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedOrigin ? 'Copié !' : 'Copier l\'URL'}</span>
+                          </button>
+                        </li>
+                        <li>
+                          <strong>URI de redirection autorisés</strong> : laissez vide (ou mettez la même URL), puis cliquez sur <strong>Créer</strong> et collez l'<strong>ID client</strong> ci-dessous.
+                        </li>
+                      </ol>
                     </div>
 
                     {ytTestResult && (
@@ -617,54 +731,73 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4">
                       <div>
-                        <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          Clé d'API YouTube (API Key)
+                        <label className="block text-xs text-zinc-200 font-medium mb-1">
+                          1. ID Client OAuth 2.0 Google *
                         </label>
-                        <input
-                          type="password"
-                          value={config.youtubeApiKey}
-                          onChange={e => setConfig({ ...config, youtubeApiKey: e.target.value })}
-                          placeholder="AIzaSy..."
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
-                        />
+                        <div className="flex flex-col sm:flex-row gap-2.5">
+                          <input
+                            type="text"
+                            value={config.youtubeOAuthClientId || ''}
+                            onChange={e => setConfig({ ...config, youtubeOAuthClientId: e.target.value })}
+                            placeholder="1234567890-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleConnectOAuthAndSync}
+                            disabled={oauthConnecting || isSyncing}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs rounded transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+                          >
+                            <Youtube className="w-4 h-4" />
+                            <span>
+                              {oauthConnecting
+                                ? 'Connexion Google en cours...'
+                                : config.youtubeAccessToken
+                                ? 'Reconnecter OAuth & Synchroniser'
+                                : 'Connecter Google OAuth & Synchroniser'}
+                            </span>
+                          </button>
+                        </div>
                         <p className="text-[11px] text-zinc-500 mt-1">
-                          Générée depuis la console Google Cloud avec YouTube Data API v3 activée.
+                          En cliquant sur ce bouton, vous autorisez la lecture de vos vidéos YouTube (y compris non répertoriées) et la synchronisation démarre automatiquement.
                         </p>
                       </div>
 
-                      <div>
-                        <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          Lien ou ID de la Playlist YouTube *
-                        </label>
-                        <input
-                          type="text"
-                          value={config.youtubePlaylistId}
-                          onChange={e => setConfig({ ...config, youtubePlaylistId: extractPlaylistId(e.target.value) })}
-                          placeholder="Collez le lien complet https://youtube.com/playlist?list=PL... ou l'ID PL..."
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
-                        />
-                        <p className="text-[11px] text-zinc-500 mt-1">
-                          Vous pouvez coller directement le lien complet de votre playlist : l'identifiant (ex: <code>PLc1MoYNc9HeM</code>) est extrait automatiquement.
-                        </p>
-                      </div>
-                    </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+                        <div>
+                          <label className="block text-xs text-zinc-300 font-medium mb-1">
+                            2. Lien ou ID de Playlist YouTube (Optionnel avec OAuth)
+                          </label>
+                          <input
+                            type="text"
+                            value={config.youtubePlaylistId}
+                            onChange={e => setConfig({ ...config, youtubePlaylistId: extractPlaylistId(e.target.value) })}
+                            placeholder="Vide = toutes les vidéos de la chaîne, ou collez https://youtube.com/playlist?list=..."
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                          />
+                          <p className="text-[11px] text-zinc-500 mt-1">
+                            Si laissé vide lors de la connexion OAuth, toutes les vidéos mises en ligne sur votre chaîne sont récupérées automatiquement. Vous pouvez aussi coller une playlist spécifique (ex: <code>PLc1MoYNc9HeM</code>).
+                          </p>
+                        </div>
 
-                    <div>
-                      <label className="block text-xs text-zinc-300 font-medium mb-1">
-                        Jeton d'accès OAuth (Bearer token, optionnel)
-                      </label>
-                      <input
-                        type="password"
-                        value={config.youtubeAccessToken || ''}
-                        onChange={e => setConfig({ ...config, youtubeAccessToken: e.target.value })}
-                        placeholder="ya29..."
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
-                      />
-                      <p className="text-[11px] text-zinc-500 mt-1">
-                        Facultatif si vous utilisez une playlist non répertoriée avec clé API standard.
-                      </p>
+                        <div>
+                          <label className="block text-xs text-zinc-400 font-medium mb-1">
+                            Clé API YouTube (Optionnelle si OAuth est connecté)
+                          </label>
+                          <input
+                            type="password"
+                            value={config.youtubeApiKey}
+                            onChange={e => setConfig({ ...config, youtubeApiKey: e.target.value })}
+                            placeholder="Optionnel (AIzaSy...)"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                          />
+                          <p className="text-[11px] text-zinc-500 mt-1">
+                            Permet la synchronisation publique sans reconnexion OAuth si la playlist est en mode public ou non répertorié.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

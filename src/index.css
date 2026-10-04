@@ -15,11 +15,15 @@
 }
 
 .font-serif-cinema {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
 }
 
 .font-cinzel {
   font-family: 'Cinzel', serif;
+}
+
+.font-title-cinema {
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
 }
 
 /* Subtle custom scrollbar for cinema aesthetics */

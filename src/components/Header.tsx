@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Lock, Film, Sliders, ShieldCheck } from 'lucide-react';
+import { Lock, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   isAdmin: boolean;
@@ -16,71 +16,39 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   isAdmin,
   onOpenAdmin,
-  onOpenAbout,
-  videoCount,
 }) => {
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0b0c10]/95 backdrop-blur-md border-b border-white/5 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-[#0b0c10]/95 backdrop-blur-md border-b border-amber-500/15 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 relative flex items-center justify-center">
         
-        {/* Zone 1: Single text element wordmark (Display Font) */}
+        {/* Centered Prominent Site Title */}
         <a
           href="#"
-          className="font-serif-cinema text-xl sm:text-2xl tracking-wide text-zinc-100 hover:text-amber-300/90 transition-colors flex items-center gap-3 group"
+          className="text-center group flex flex-col items-center px-8"
         >
-          <span className="w-8 h-8 rounded-sm bg-gradient-to-br from-amber-500/20 to-amber-700/30 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:border-amber-400/50 transition-colors shrink-0">
-            <Film className="w-4 h-4" />
+          <span className="font-title-cinema text-xl sm:text-3xl md:text-4xl font-bold tracking-wider uppercase bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-200 bg-clip-text text-transparent drop-shadow-[0_2px_14px_rgba(245,158,11,0.35)] leading-snug">
+            Atelier Cinéma du Saulchoir
           </span>
-          <span className="font-semibold text-zinc-100">Atelier Cinéma du Saulchoir</span>
+          <span className="mt-1.5 w-24 sm:w-36 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
         </a>
 
-        {/* Zone 2: Clean text navigation links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-400">
-          <a
-            href="#nouvelle-publication"
-            className="hover:text-zinc-100 transition-colors relative py-1 after:absolute after:bottom-0 after:left-0 after:w-0 after:h-px after:bg-amber-400 hover:after:w-full after:transition-all"
-          >
-            Nouvelle publication
-          </a>
-          <a
-            href="#archives"
-            className="hover:text-zinc-100 transition-colors relative py-1 after:absolute after:bottom-0 after:left-0 after:w-0 after:h-px after:bg-amber-400 hover:after:w-full after:transition-all"
-          >
-            Archives ({videoCount})
-          </a>
-          <button
-            onClick={onOpenAbout}
-            className="hover:text-zinc-100 transition-colors relative py-1 after:absolute after:bottom-0 after:left-0 after:w-0 after:h-px after:bg-amber-400 hover:after:w-full after:transition-all cursor-pointer"
-          >
-            L'Atelier
-          </button>
-        </nav>
-
-        {/* Zone 3: Primary Action (Admin Access) */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onOpenAdmin}
-            aria-label="Accéder à l'espace administrateur"
-            className={`px-3.5 py-2 text-xs font-medium rounded transition-all flex items-center gap-2 cursor-pointer border ${
-              isAdmin
-                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
-                : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white hover:border-zinc-700'
-            }`}
-          >
-            {isAdmin ? (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span className="whitespace-nowrap">Mode Admin</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              </>
-            ) : (
-              <>
-                <Lock className="w-3.5 h-3.5 text-zinc-400" />
-                <span className="whitespace-nowrap">Espace Administrateur</span>
-              </>
-            )}
-          </button>
-        </div>
+        {/* Discreet Admin Access Button in Top-Right Corner */}
+        <button
+          onClick={onOpenAdmin}
+          aria-label="Accéder à l'espace administrateur"
+          title={isAdmin ? 'Mode Administrateur actif' : 'Administration'}
+          className={`absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all flex items-center justify-center cursor-pointer ${
+            isAdmin
+              ? 'bg-amber-500/10 text-amber-400/80 border border-amber-500/25 hover:bg-amber-500/20 hover:text-amber-300'
+              : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/5 opacity-60 hover:opacity-100'
+          }`}
+        >
+          {isAdmin ? (
+            <ShieldCheck className="w-4 h-4" />
+          ) : (
+            <Lock className="w-3.5 h-3.5" />
+          )}
+        </button>
 
       </div>
     </header>

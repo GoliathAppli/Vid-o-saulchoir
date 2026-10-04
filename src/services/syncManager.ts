@@ -49,8 +49,12 @@ export const syncManager = {
         }
       }
 
-      // 1. YouTube Sync
-      if ((config.youtubeApiKey || config.youtubeAccessToken) && cleanPlaylistId) {
+      // 1. YouTube Sync (via OAuth 2.0 Access Token and/or Playlist ID + API Key)
+      const canSyncYouTube = Boolean(
+        config.youtubeAccessToken || (config.youtubeApiKey && cleanPlaylistId)
+      );
+
+      if (canSyncYouTube) {
         try {
           const ytVideos = await youtubeService.fetchPlaylistVideos(
             cleanPlaylistId,
@@ -145,7 +149,7 @@ export const syncManager = {
 
       const summary = actionsTaken.length > 0
         ? actionsTaken.join(' · ')
-        : 'Veuillez renseigner la Clé API YouTube et la Playlist (ou le dépôt GitHub) pour synchroniser.';
+        : 'Veuillez connecter votre ID Client OAuth 2.0 YouTube (ou le dépôt GitHub) pour synchroniser.';
 
       const updatedConfig: SyncConfig = {
         ...config,
@@ -251,8 +255,8 @@ export const syncManager = {
     let currentVideos = storageService.getVideos();
     let enrichedData: Partial<VideoItem> = {};
 
-    // Try YouTube API enrichment if apiKey is available
-    if (config.youtubeApiKey) {
+    // Try YouTube API enrichment if OAuth token or apiKey is available
+    if (config.youtubeAccessToken || config.youtubeApiKey) {
       try {
         const details = await youtubeService.fetchVideoDetails(
           videoId,

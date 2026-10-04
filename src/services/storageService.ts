@@ -14,10 +14,11 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_CONFIG: SyncConfig = {
+  youtubeOAuthClientId: '',
+  youtubeAccessToken: '',
   youtubeApiKey: '',
   youtubePlaylistId: '',
   youtubeChannelId: '',
-  youtubeAccessToken: '',
   githubToken: '',
   githubOwner: '',
   githubRepo: '',
@@ -27,7 +28,7 @@ const DEFAULT_CONFIG: SyncConfig = {
   autoSyncIntervalMinutes: 15,
   lastSyncTimestamp: undefined,
   lastSyncStatus: 'idle',
-  lastSyncMessage: 'En attente des paramètres API YouTube / GitHub.',
+  lastSyncMessage: 'En attente de la connexion OAuth 2.0 YouTube ou GitHub.',
 };
 
 const FRENCH_MONTHS = [
