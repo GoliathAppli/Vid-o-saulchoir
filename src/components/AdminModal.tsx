@@ -1035,7 +1035,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </div>
                       <button
                         onClick={() => {
-                          const yaml = githubService.generateWorkflowYaml(config.youtubePlaylistId, config.githubFilePath);
+                          const yaml = githubService.generateWorkflowYaml(config.githubFilePath);
                           navigator.clipboard.writeText(yaml);
                           setCopiedYaml(true);
                           setTimeout(() => setCopiedYaml(false), 2000);

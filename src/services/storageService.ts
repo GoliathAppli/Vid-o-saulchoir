@@ -20,8 +20,8 @@ const DEFAULT_CONFIG: SyncConfig = {
   youtubePlaylistId: '',
   youtubeChannelId: '',
   githubToken: '',
-  githubOwner: '',
-  githubRepo: '',
+  githubOwner: 'goliathappli',
+  githubRepo: 'Vid-o-saulchoir',
   githubBranch: 'main',
   githubFilePath: 'data/videos.json',
   autoSyncEnabled: true,
@@ -73,7 +73,13 @@ export const storageService = {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.CONFIG);
       if (stored) {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored);
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          githubOwner: parsed.githubOwner || DEFAULT_CONFIG.githubOwner,
+          githubRepo: parsed.githubRepo || DEFAULT_CONFIG.githubRepo,
+        };
       }
     } catch (e) {
       console.error('Erreur lecture config', e);

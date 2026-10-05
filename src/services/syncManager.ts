@@ -30,8 +30,8 @@ export const syncManager = {
     const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId || '');
 
     try {
-      // 0. If local catalog is empty and GitHub repo is configured, try pulling existing catalog from GitHub first
-      if (currentVideos.length === 0 && config.githubOwner && config.githubRepo) {
+      // 0. If GitHub repo is configured, pull the shared catalog from GitHub so any computer stays in sync
+      if (config.githubOwner && config.githubRepo) {
         try {
           const ghPull = await githubService.pullVideos(
             config.githubToken,
@@ -41,7 +41,14 @@ export const syncManager = {
             config.githubFilePath || 'data/videos.json'
           );
           if (ghPull.videos && ghPull.videos.length > 0) {
-            currentVideos = ghPull.videos;
+            const localMap = new Map<string, VideoItem>();
+            for (const v of currentVideos) {
+              localMap.set(v.id, v);
+            }
+            for (const ghVid of ghPull.videos) {
+              localMap.set(ghVid.id, ghVid);
+            }
+            currentVideos = Array.from(localMap.values());
             actionsTaken.push(`${ghPull.videos.length} vidéo(s) chargée(s) depuis GitHub`);
           }
         } catch {
