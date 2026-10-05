@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { VideoItem } from './types/cinema';
+import { VideoItem, VideoCategory } from './types/cinema';
 import { storageService } from './services/storageService';
 import { syncManager } from './services/syncManager';
 import { Header } from './components/Header';
@@ -28,10 +28,8 @@ export default function App() {
   const [selectedVideoModal, setSelectedVideoModal] = useState<VideoItem | null>(null);
   const [editingVideoTarget, setEditingVideoTarget] = useState<VideoItem | null>(null);
 
-  // Partition videos dynamically:
-  // - latest: the very newest video published -> "Nouvelle publication"
-  // - archives: all previous videos organized by Year (Année) and Month (Mois)
-  const { latest, archives } = useMemo(() => {
+  // Latest video published -> "Nouvelle publication"
+  const { latest } = useMemo(() => {
     return storageService.getPartitionedVideos(videos);
   }, [videos]);
 
@@ -39,6 +37,18 @@ export default function App() {
   const handleCatalogUpdated = useCallback((updatedVideos: VideoItem[]) => {
     setVideos(updatedVideos);
   }, []);
+
+  // Handler to move selected videos from "Vidéos d'atelier" into "Pom's D'or" or "Vidéos avec Vaulx"
+  const handleMoveVideosToCategory = useCallback(
+    async (videoIds: string[], targetCategory: VideoCategory) => {
+      const currentConfig = storageService.getConfig();
+      const res = await syncManager.moveVideosToCategory(videoIds, targetCategory, currentConfig);
+      if (res.success) {
+        setVideos(res.videos);
+      }
+    },
+    []
+  );
 
   // Handler to open video editor directly
   const handleEditVideo = (video: VideoItem) => {
@@ -98,16 +108,13 @@ export default function App() {
           onOpenAdmin={() => setIsAdminModalOpen(true)}
         />
 
-        {/* Section 2: "Archives" grouped chronologically by Year (Année) and Month (Mois) */}
+        {/* Section 2: Categories ("Vidéos d'atelier", "Vidéos avec Vaulx", "Pom's D'or") grouped by Year & Month */}
         <ArchiveSection
-          archives={archives}
+          allVideos={videos}
           onSelectVideo={video => setSelectedVideoModal(video)}
           isAdmin={isAdmin}
           onEditVideo={handleEditVideo}
-          onAddVideoClick={() => {
-            setEditingVideoTarget(null);
-            setIsAdminModalOpen(true);
-          }}
+          onMoveVideosToCategory={handleMoveVideosToCategory}
         />
       </main>
 

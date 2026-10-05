@@ -357,7 +357,7 @@ export const youtubeService = {
             isUnlisted: isUnlisted,
             duration: '12:00', // default, enriched below
             director: snippet.videoOwnerChannelTitle || snippet.channelTitle || 'Atelier Cinéma du Saulchoir',
-            genre: 'Court-métrage',
+            genre: "Vidéos d'atelier",
             tags: ['Atelier', 'Saulchoir', isUnlisted ? 'Non répertorié' : 'Public'],
           });
         }

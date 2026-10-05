@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { SyncConfig, VideoItem, SyncLogEntry } from '../types/cinema';
+import { SyncConfig, VideoItem, SyncLogEntry, normalizeVideoCategory } from '../types/cinema';
 import { storageService } from '../services/storageService';
 import { syncManager } from '../services/syncManager';
 import { youtubeService, extractYouTubeId, extractPlaylistId } from '../services/youtubeService';
@@ -71,7 +71,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     title: '',
     director: 'Atelier Cinéma du Saulchoir',
     publishedAt: new Date().toISOString().split('T')[0],
-    genre: 'Court-métrage',
+    genre: "Vidéos d'atelier",
     duration: '10:00',
     isUnlisted: true,
     synopsis: '',
@@ -95,7 +95,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         title: editingVideoTarget.title || '',
         director: editingVideoTarget.director || 'Atelier Cinéma du Saulchoir',
         publishedAt: editingVideoTarget.publishedAt ? editingVideoTarget.publishedAt.split('T')[0] : '',
-        genre: editingVideoTarget.genre || 'Court-métrage',
+        genre: normalizeVideoCategory(editingVideoTarget.genre),
         duration: editingVideoTarget.duration || '10:00',
         isUnlisted: editingVideoTarget.isUnlisted ?? true,
         synopsis: editingVideoTarget.synopsis || editingVideoTarget.description || '',
@@ -389,7 +389,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         title: '',
         director: 'Atelier Cinéma du Saulchoir',
         publishedAt: new Date().toISOString().split('T')[0],
-        genre: 'Court-métrage',
+        genre: "Vidéos d'atelier",
         duration: '10:00',
         isUnlisted: true,
         synopsis: '',
@@ -1184,18 +1184,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       {/* Genre */}
                       <div className="md:col-span-4">
                         <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          Genre / Catégorie
+                          Catégorie
                         </label>
                         <select
                           value={videoForm.genre}
                           onChange={e => setVideoForm({ ...videoForm, genre: e.target.value })}
                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200"
                         >
-                          <option value="Court-métrage">Court-métrage</option>
-                          <option value="Documentaire">Documentaire</option>
-                          <option value="Atelier & Exercice">Atelier & Exercice</option>
-                          <option value="Cinéma expérimental">Cinéma expérimental</option>
-                          <option value="Masterclass & Rencontre">Masterclass & Rencontre</option>
+                          <option value="Vidéos d'atelier">Vidéos d'atelier</option>
+                          <option value="Vidéos avec Vaulx">Vidéos avec Vaulx</option>
+                          <option value="Pom's D'or">Pom's D'or</option>
                         </select>
                       </div>
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, SyncConfig } from '../types/cinema';
+import { VideoItem, SyncConfig, VideoCategory, normalizeVideoCategory } from '../types/cinema';
 import { storageService } from './storageService';
 import { youtubeService, extractYouTubeId, extractPlaylistId } from './youtubeService';
 import { githubService } from './githubService';
@@ -77,15 +77,19 @@ export const syncManager = {
           for (const yt of ytVideos) {
             if (!existingMap.has(yt.id)) {
               newItemsCount++;
-              currentVideos.unshift(yt);
+              currentVideos.unshift({
+                ...yt,
+                genre: "Vidéos d'atelier",
+              });
             } else {
-              // Update existing without losing manual synopsis/notes
+              // Update existing without losing manual category/synopsis/notes
               const existing = existingMap.get(yt.id)!;
               existing.title = yt.title || existing.title;
               existing.publishedAt = yt.publishedAt || existing.publishedAt;
               existing.thumbnailUrl = yt.thumbnailUrl || existing.thumbnailUrl;
               existing.duration = yt.duration || existing.duration;
               existing.isUnlisted = yt.isUnlisted;
+              existing.genre = normalizeVideoCategory(existing.genre);
             }
           }
 
@@ -291,7 +295,7 @@ export const syncManager = {
       isUnlisted: videoData.isUnlisted !== undefined ? videoData.isUnlisted : (enrichedData.isUnlisted ?? true),
       duration: videoData.duration?.trim() || enrichedData.duration || '12:00',
       director: videoData.director?.trim() || enrichedData.director || 'Atelier Cinéma du Saulchoir',
-      genre: videoData.genre || 'Court-métrage',
+      genre: normalizeVideoCategory(videoData.genre),
       tags: videoData.tags || enrichedData.tags || ['Atelier', 'Saulchoir'],
       technicalNotes: videoData.technicalNotes?.trim() || 'Format 1.85:1 · Son direct',
       featuredOverride: videoData.featuredOverride || false,
@@ -364,5 +368,52 @@ export const syncManager = {
     }
 
     return { success: true, message: `La vidéo "${target.title}" a été supprimée.` };
+  },
+
+  /**
+   * Move selected videos into target category ("Vidéos d'atelier", "Vidéos avec Vaulx", or "Pom's D'or")
+   */
+  async moveVideosToCategory(
+    videoIds: string[],
+    targetCategory: VideoCategory,
+    config: SyncConfig
+  ): Promise<{ success: boolean; videos: VideoItem[]; message: string }> {
+    const idSet = new Set(videoIds);
+    const currentVideos = storageService.getVideos().map(v => {
+      if (idSet.has(v.id)) {
+        return {
+          ...v,
+          genre: targetCategory,
+        };
+      }
+      return v;
+    });
+
+    storageService.saveVideos(currentVideos);
+
+    storageService.addLog({
+      source: 'system',
+      status: 'success',
+      message: `${videoIds.length} vidéo(s) déplacée(s) dans la catégorie "${targetCategory}".`,
+      itemCount: videoIds.length,
+    });
+
+    if (config.githubToken && config.githubOwner && config.githubRepo) {
+      githubService.pushVideos(
+        config.githubToken,
+        config.githubOwner,
+        config.githubRepo,
+        config.githubBranch || 'main',
+        config.githubFilePath || 'data/videos.json',
+        currentVideos,
+        `Classement : ${videoIds.length} vidéo(s) déplacée(s) vers "${targetCategory}"`
+      ).catch(e => console.warn('Sync GitHub asynchrone échoué', e));
+    }
+
+    return {
+      success: true,
+      videos: storageService.getVideos(),
+      message: `${videoIds.length} vidéo(s) déplacée(s) vers "${targetCategory}".`,
+    };
   }
 };

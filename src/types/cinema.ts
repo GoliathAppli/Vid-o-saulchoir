@@ -3,6 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type VideoCategory = "Vidéos d'atelier" | "Vidéos avec Vaulx" | "Pom's D'or";
+
+export const VIDEO_CATEGORIES: VideoCategory[] = [
+  "Vidéos d'atelier",
+  "Vidéos avec Vaulx",
+  "Pom's D'or",
+];
+
+export function normalizeVideoCategory(genre?: string): VideoCategory {
+  if (genre === "Vidéos avec Vaulx") return "Vidéos avec Vaulx";
+  if (genre === "Pom's D'or") return "Pom's D'or";
+  return "Vidéos d'atelier";
+}
+
 export interface VideoItem {
   id: string; // YouTube Video ID
   title: string;
@@ -13,7 +27,7 @@ export interface VideoItem {
   isUnlisted: boolean;
   duration?: string; // e.g. "14:35"
   director?: string; // e.g. "Atelier Saulchoir", "Jean-Luc M."
-  genre?: 'Court-métrage' | 'Documentaire' | 'Atelier & Exercice' | 'Cinéma expérimental' | 'Masterclass & Rencontre' | string;
+  genre?: VideoCategory | string;
   tags?: string[];
   synopsis?: string;
   technicalNotes?: string; // e.g. "Format 1.85:1 · Prise de son direct · 4K"
