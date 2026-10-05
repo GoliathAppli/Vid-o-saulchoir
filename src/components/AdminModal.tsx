@@ -162,18 +162,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         config.youtubeOAuthClientId || ''
       );
 
-      let targetPlaylistId = extractPlaylistId(config.youtubePlaylistId);
+      // Always resolve the authenticated channel's uploads playlist via OAuth 2.0
+      let targetPlaylistId = '';
       let channelLabel = '';
-
-      // If no specific playlist was provided, automatically get the channel's own uploads playlist
-      if (!targetPlaylistId) {
-        try {
-          const channelInfo = await youtubeService.getAuthenticatedUploadsPlaylistId(accessToken);
-          targetPlaylistId = channelInfo.uploadsPlaylistId;
-          channelLabel = ` (Chaîne : ${channelInfo.channelTitle})`;
-        } catch {
-          // Keep empty if user wants to specify a playlist manually
-        }
+      try {
+        const channelInfo = await youtubeService.getAuthenticatedUploadsPlaylistId(accessToken);
+        targetPlaylistId = channelInfo.uploadsPlaylistId;
+        channelLabel = ` (Chaîne : ${channelInfo.channelTitle})`;
+      } catch {
+        targetPlaylistId = extractPlaylistId(config.youtubePlaylistId);
       }
 
       const updatedConfig: SyncConfig = {
@@ -734,7 +731,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <div className="space-y-4">
                       <div>
                         <label className="block text-xs text-zinc-200 font-medium mb-1">
-                          1. ID Client OAuth 2.0 Google *
+                          ID Client OAuth 2.0 Google *
                         </label>
                         <div className="flex flex-col sm:flex-row gap-2.5">
                           <input
@@ -761,42 +758,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           </button>
                         </div>
                         <p className="text-[11px] text-zinc-500 mt-1">
-                          En cliquant sur ce bouton, vous autorisez la lecture de vos vidéos YouTube (y compris non répertoriées) et la synchronisation démarre automatiquement.
+                          En cliquant sur ce bouton, vous autorisez la lecture de votre chaîne YouTube : toutes vos vidéos (y compris non répertoriées) sont synchronisées automatiquement dans « Vidéos d'atelier ».
                         </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-white/5">
-                        <div>
-                          <label className="block text-xs text-zinc-300 font-medium mb-1">
-                            2. Lien ou ID de Playlist YouTube (Optionnel avec OAuth)
-                          </label>
-                          <input
-                            type="text"
-                            value={config.youtubePlaylistId}
-                            onChange={e => setConfig({ ...config, youtubePlaylistId: extractPlaylistId(e.target.value) })}
-                            placeholder="Vide = toutes les vidéos de la chaîne, ou collez https://youtube.com/playlist?list=..."
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
-                          />
-                          <p className="text-[11px] text-zinc-500 mt-1">
-                            Si laissé vide lors de la connexion OAuth, toutes les vidéos mises en ligne sur votre chaîne sont récupérées automatiquement. Vous pouvez aussi coller une playlist spécifique (ex: <code>PLc1MoYNc9HeM</code>).
-                          </p>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs text-zinc-400 font-medium mb-1">
-                            Clé API YouTube (Optionnelle si OAuth est connecté)
-                          </label>
-                          <input
-                            type="password"
-                            value={config.youtubeApiKey}
-                            onChange={e => setConfig({ ...config, youtubeApiKey: e.target.value })}
-                            placeholder="Optionnel (AIzaSy...)"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
-                          />
-                          <p className="text-[11px] text-zinc-500 mt-1">
-                            Permet la synchronisation publique sans reconnexion OAuth si la playlist est en mode public ou non répertorié.
-                          </p>
-                        </div>
                       </div>
                     </div>
                   </div>
