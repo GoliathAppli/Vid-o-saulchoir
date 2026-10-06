@@ -77,3 +77,21 @@ export interface YearGroup {
   months: MonthGroup[];
   totalVideos: number;
 }
+
+export interface NewsPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  addedAt: string;
+}
+
+export type SeasonalThemeId =
+  | 'default'
+  | 'new_year'
+  | 'carnival'
+  | 'valentines'
+  | 'easter'
+  | 'summer'
+  | 'halloween'
+  | 'christmas';
+

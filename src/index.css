@@ -26,6 +26,241 @@
   font-family: 'Cinzel Decorative', 'Cinzel', serif;
 }
 
+/* ==========================================================================
+   SEASONAL TITLE THEMES & ANIMATIONS
+   ========================================================================== */
+
+/* 0. Par défaut : Or Cinéma */
+.title-theme-default {
+  background: linear-gradient(90deg, #fde68a 0%, #fbbf24 50%, #fef08a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 14px rgba(245, 158, 11, 0.35));
+}
+
+/* 1. Nouvel An (30 déc - 15 janv) : Reflets festifs brillants (Or, Champagne, Étincelles) */
+@keyframes newYearSparkle {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 0 12px rgba(253, 224, 71, 0.65)) drop-shadow(0 0 24px rgba(255, 255, 255, 0.35));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 0 20px rgba(250, 204, 21, 0.95)) drop-shadow(0 0 35px rgba(147, 197, 253, 0.6));
+  }
+}
+
+.title-theme-new_year {
+  background: linear-gradient(90deg, #fffbeb, #fde047, #ffffff, #f59e0b, #e0f2fe, #fde047);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: newYearSparkle 3.5s ease-in-out infinite;
+}
+
+/* 2. Carnaval (1er fév - 6 fév) : Couleurs ultra-vives et balancement festif */
+@keyframes carnivalVivid {
+  0% {
+    background-position: 0% 50%;
+    transform: rotate(-0.8deg) scale(1);
+  }
+  25% {
+    transform: rotate(0.8deg) scale(1.02);
+  }
+  50% {
+    background-position: 100% 50%;
+    transform: rotate(-0.8deg) scale(1);
+  }
+  75% {
+    transform: rotate(0.8deg) scale(1.02);
+  }
+  100% {
+    background-position: 0% 50%;
+    transform: rotate(-0.8deg) scale(1);
+  }
+}
+
+.title-theme-carnival {
+  background: linear-gradient(90deg, #ff007f, #ffae00, #00f5d4, #9b5de5, #fee440, #00bbf9, #ff007f);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 16px rgba(255, 0, 127, 0.5));
+  animation: carnivalVivid 4s ease-in-out infinite;
+}
+
+/* 3. Saint-Valentin (11 fév - 14 fév) : Pulsation romantique rose/rubis */
+@keyframes valentineHeartbeat {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 12px rgba(244, 63, 94, 0.55));
+  }
+  15% {
+    transform: scale(1.035);
+    filter: drop-shadow(0 0 22px rgba(251, 113, 133, 0.9));
+  }
+  30% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.025);
+    filter: drop-shadow(0 0 18px rgba(244, 63, 94, 0.85));
+  }
+}
+
+.title-theme-valentines {
+  background: linear-gradient(90deg, #fecdd3, #fb7185, #e11d48, #fda4af, #fb7185);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: valentineHeartbeat 2.4s ease-in-out infinite;
+}
+
+/* 4. Pâques (1er avr - 30 avr) : Ambiance douce printanière & chocolat doré */
+@keyframes easterGentleBounce {
+  0%, 100% {
+    transform: translateY(0px);
+    filter: drop-shadow(0 2px 14px rgba(167, 243, 208, 0.45));
+  }
+  50% {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 4px 18px rgba(253, 230, 138, 0.65));
+  }
+}
+
+.title-theme-easter {
+  background: linear-gradient(90deg, #fde68a, #a7f3d0, #f9a8d4, #fcd34d, #c4b5fd);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: easterGentleBounce 3.2s ease-in-out infinite;
+}
+
+/* 5. Vacances d'été (1er juil - 31 août) : Soleil éclatant & reflets plage */
+@keyframes summerRadiance {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 2px 16px rgba(251, 191, 36, 0.6));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 2px 24px rgba(56, 189, 248, 0.65));
+  }
+}
+
+.title-theme-summer {
+  background: linear-gradient(90deg, #fef08a, #f59e0b, #fb7185, #38bdf8, #fde047);
+  background-size: 250% 250%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: summerRadiance 4s ease-in-out infinite;
+}
+
+/* 6. Halloween (15 oct - 2 nov) : Style horreur / tremblement & lueur citrouille */
+@keyframes halloweenTremor {
+  0%, 90%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+    filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.75)) drop-shadow(0 0 28px rgba(147, 51, 234, 0.55));
+  }
+  92% {
+    transform: translate(-1.5px, 1px) rotate(-0.6deg);
+    filter: drop-shadow(0 0 22px rgba(234, 88, 12, 1)) drop-shadow(0 0 32px rgba(168, 85, 247, 0.9));
+  }
+  94% {
+    transform: translate(1.5px, -1px) rotate(0.6deg);
+  }
+  96% {
+    transform: translate(-1px, -1px) rotate(-0.4deg);
+  }
+  98% {
+    transform: translate(1px, 1.5px) rotate(0.4deg);
+  }
+}
+
+.title-theme-halloween {
+  background: linear-gradient(90deg, #fb923c, #ea580c, #c084fc, #f97316, #fde047);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: halloweenTremor 3s infinite;
+}
+
+/* 7. Noël (1er déc - 25 déc) : Scintillement hivernal rouge, or et neige */
+@keyframes christmasTwinkle {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.6)) drop-shadow(0 0 22px rgba(250, 204, 21, 0.5));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.85)) drop-shadow(0 0 30px rgba(34, 197, 94, 0.55));
+  }
+}
+
+.title-theme-christmas {
+  background: linear-gradient(90deg, #ffffff, #fde047, #f87171, #4ade80, #ffffff, #fbbf24);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: christmasTwinkle 3.5s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   DECORATION SVG ANIMATIONS
+   ========================================================================== */
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-4px) rotate(4deg); }
+}
+
+@keyframes swayGentle {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes batFlap {
+  0%, 100% { transform: translateY(0px) scaleY(1); }
+  50% { transform: translateY(-4px) scaleY(0.82); }
+}
+
+@keyframes twinkleStar {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.anim-float {
+  animation: floatSlow 3s ease-in-out infinite;
+}
+
+.anim-sway {
+  animation: swayGentle 2.8s ease-in-out infinite;
+}
+
+.anim-spin-slow {
+  animation: spinSlow 14s linear infinite;
+}
+
+.anim-bat {
+  animation: batFlap 1.2s ease-in-out infinite;
+}
+
+.anim-twinkle {
+  animation: twinkleStar 2s ease-in-out infinite;
+}
+
 /* Subtle custom scrollbar for cinema aesthetics */
 ::-webkit-scrollbar {
   width: 7px;

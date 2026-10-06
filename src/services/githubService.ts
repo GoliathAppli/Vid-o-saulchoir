@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem } from '../types/cinema';
+import { VideoItem, NewsPhoto } from '../types/cinema';
 
 function b64DecodeUnicode(str: string): string {
   // Safe base64 decoding supporting UTF-8 characters (accents, quotes, etc.)
@@ -234,6 +234,79 @@ export const githubService = {
       sha: putData.content?.sha,
       commitUrl: putData.commit?.html_url,
     };
+  },
+
+  /**
+   * Pull data/news_photos.json from GitHub
+   */
+  async pullNewsPhotos(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main'
+  ): Promise<NewsPhoto[]> {
+    const cleanPath = 'data/news_photos.json';
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+    };
+    if (token && token.trim()) {
+      headers['Authorization'] = `token ${token.trim()}`;
+    }
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.content) return [];
+    const decoded = b64DecodeUnicode(data.content);
+    const parsed = JSON.parse(decoded);
+    return Array.isArray(parsed) ? parsed : [];
+  },
+
+  /**
+   * Push data/news_photos.json to GitHub
+   */
+  async pushNewsPhotos(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main',
+    photos: NewsPhoto[]
+  ): Promise<void> {
+    if (!token || !owner || !repo) return;
+    const cleanPath = 'data/news_photos.json';
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `token ${token.trim()}`,
+      'Content-Type': 'application/json',
+    };
+
+    let currentSha: string | undefined;
+    try {
+      const getUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+      const getRes = await fetch(getUrl, { headers });
+      if (getRes.ok) {
+        const getData = await getRes.json();
+        currentSha = getData.sha;
+      }
+    } catch {
+      // ignore
+    }
+
+    const encodedContent = b64EncodeUnicode(JSON.stringify(photos, null, 2));
+    const putUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}`;
+    const payload: Record<string, string> = {
+      message: `Mise à jour des photos Actualité (${photos.length} photo(s))`,
+      content: encodedContent,
+      branch: branch.trim() || 'main',
+    };
+    if (currentSha) payload.sha = currentSha;
+
+    await fetch(putUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+    });
   },
 
   /**

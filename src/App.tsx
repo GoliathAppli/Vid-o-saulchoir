@@ -4,10 +4,12 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { VideoItem, VideoCategory } from './types/cinema';
+import { VideoItem, VideoCategory, NewsPhoto } from './types/cinema';
 import { storageService } from './services/storageService';
 import { syncManager } from './services/syncManager';
+import { githubService } from './services/githubService';
 import { Header } from './components/Header';
+import { NewsCarouselSection } from './components/NewsCarouselSection';
 import { HeroFeaturedVideo } from './components/HeroFeaturedVideo';
 import { ArchiveSection } from './components/ArchiveSection';
 import { VideoModal } from './components/VideoModal';
@@ -18,6 +20,9 @@ import { Footer } from './components/Footer';
 export default function App() {
   // Video catalog state
   const [videos, setVideos] = useState<VideoItem[]>(() => storageService.getVideos());
+
+  // News ("Actualité") photos state
+  const [newsPhotos, setNewsPhotos] = useState<NewsPhoto[]>(() => storageService.getNewsPhotos());
 
   // Admin authentication state (checks sessionStorage)
   const [isAdmin, setIsAdmin] = useState<boolean>(() => storageService.isAdminAuthenticated());
@@ -36,6 +41,23 @@ export default function App() {
   // Handler when catalog is updated (by sync, manual add, edit, or delete)
   const handleCatalogUpdated = useCallback((updatedVideos: VideoItem[]) => {
     setVideos(updatedVideos);
+  }, []);
+
+  // Handler when Admin inserts or deletes Actualité photos
+  const handleUpdateNewsPhotos = useCallback((updatedPhotos: NewsPhoto[]) => {
+    setNewsPhotos(updatedPhotos);
+    storageService.saveNewsPhotos(updatedPhotos);
+
+    const cfg = storageService.getConfig();
+    if (cfg.githubToken && cfg.githubOwner && cfg.githubRepo) {
+      githubService.pushNewsPhotos(
+        cfg.githubToken,
+        cfg.githubOwner,
+        cfg.githubRepo,
+        cfg.githubBranch || 'main',
+        updatedPhotos
+      ).catch(e => console.warn('Sync photos GitHub échoué', e));
+    }
   }, []);
 
   // Handler to move selected videos from "Vidéos d'atelier" into "Pom's D'or" or "Vidéos avec Vaulx"
@@ -66,6 +88,23 @@ export default function App() {
       );
       const hasGitHub = Boolean(currentConfig.githubOwner && currentConfig.githubRepo);
 
+      if (hasGitHub) {
+        githubService
+          .pullNewsPhotos(
+            currentConfig.githubToken,
+            currentConfig.githubOwner,
+            currentConfig.githubRepo,
+            currentConfig.githubBranch || 'main'
+          )
+          .then(remotePhotos => {
+            if (remotePhotos && remotePhotos.length > 0) {
+              setNewsPhotos(remotePhotos);
+              storageService.saveNewsPhotos(remotePhotos);
+            }
+          })
+          .catch(() => {});
+      }
+
       if (!hasYouTube && !hasGitHub) return;
 
       syncManager.runFullSync(currentConfig).then(res => {
@@ -90,7 +129,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0b0c10] text-[#e8eaed] selection:bg-amber-500/30 selection:text-white">
       
-      {/* Top Navigation Bar with strict Top Bar Contract */}
+      {/* Top Navigation Bar with Seasonal Title Animations */}
       <Header
         isAdmin={isAdmin}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
@@ -99,6 +138,13 @@ export default function App() {
       />
 
       <main className="flex-1">
+        {/* Section 0: "Actualité" (Large uniform photo carousel with 5-second auto-scroll, editable in Admin mode) */}
+        <NewsCarouselSection
+          photos={newsPhotos}
+          isAdmin={isAdmin}
+          onUpdatePhotos={handleUpdateNewsPhotos}
+        />
+
         {/* Section 1: "Nouvelle publication" (The very latest video in spotlight) */}
         <HeroFeaturedVideo
           video={latest}

@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, normalizeVideoCategory } from '../types/cinema';
+import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, normalizeVideoCategory } from '../types/cinema';
+import bundledVideosData from '../../data/videos.json';
 
 const STORAGE_KEYS = {
   LEGACY_VIDEOS: 'atelier_cinema_videos_catalog',
   VIDEOS: 'atelier_cinema_videos_v2',
+  NEWS_PHOTOS: 'atelier_cinema_news_photos_v1',
   CONFIG: 'atelier_cinema_sync_config',
   LOGS: 'atelier_cinema_sync_logs',
   ADMIN_SESSION: 'atelier_cinema_admin_auth',
@@ -47,12 +49,19 @@ export const storageService = {
       const stored = localStorage.getItem(STORAGE_KEYS.VIDEOS);
       if (stored) {
         const parsed: VideoItem[] = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(v => ({
             ...v,
             genre: normalizeVideoCategory(v.genre),
           }));
         }
+      }
+
+      if (Array.isArray(bundledVideosData) && bundledVideosData.length > 0) {
+        return (bundledVideosData as VideoItem[]).map(v => ({
+          ...v,
+          genre: normalizeVideoCategory(v.genre),
+        }));
       }
     } catch (e) {
       console.error('Erreur lecture vidéos locales', e);
@@ -74,6 +83,29 @@ export const storageService = {
       localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(sorted));
     } catch (e) {
       console.error('Erreur sauvegarde vidéos locales', e);
+    }
+  },
+
+  getNewsPhotos(): NewsPhoto[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.NEWS_PHOTOS);
+      if (stored) {
+        const parsed: NewsPhoto[] = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Erreur lecture photos actualité', e);
+    }
+    return [];
+  },
+
+  saveNewsPhotos(photos: NewsPhoto[]): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.NEWS_PHOTOS, JSON.stringify(photos));
+    } catch (e) {
+      console.error('Erreur sauvegarde photos actualité', e);
     }
   },
 
