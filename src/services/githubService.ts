@@ -55,21 +55,26 @@ export const githubService = {
       };
     }
 
-    const headers: HeadersInit = {
-      Accept: 'application/vnd.github.v3+json',
-    };
-    if (token) {
-      headers['Authorization'] = `token ${token.trim()}`;
+    if (!token || !token.trim()) {
+      return {
+        success: false,
+        message: 'Veuillez renseigner votre Jeton GitHub (ghp_...) pour autoriser la synchronisation.',
+      };
     }
 
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `token ${token.trim()}`,
+    };
+
     try {
-      // 1. Check repo access
+      // 1. Check repo access & token validity
       const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}`;
       const repoRes = await fetch(repoUrl, { headers });
 
       if (!repoRes.ok) {
         if (repoRes.status === 404) {
-          throw new Error('Dépôt introuvable ou privé (ajoutez un jeton d\'accès personnel avec le périmètre "repo").');
+          throw new Error('Dépôt introuvable ou jeton sans accès au dépôt.');
         }
         if (repoRes.status === 401) {
           throw new Error('Jeton GitHub non valide ou expiré.');
@@ -78,6 +83,9 @@ export const githubService = {
       }
 
       const repoData = await repoRes.json();
+      if (repoData.permissions && repoData.permissions.push === false) {
+        throw new Error('Ce jeton GitHub n\'a pas la permission d\'écriture ("repo") sur ce dépôt.');
+      }
 
       // 2. Check if file exists
       const cleanPath = filePath.trim().replace(/^\//, '');

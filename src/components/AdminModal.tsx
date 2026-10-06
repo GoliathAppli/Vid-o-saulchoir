@@ -58,6 +58,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const [ghTesting, setGhTesting] = useState(false);
   const [ghTestResult, setGhTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [ghSyncProgress, setGhSyncProgress] = useState<{
+    percent: number;
+    status: 'idle' | 'running' | 'success' | 'error';
+    stepText: string;
+  }>({
+    percent: 0,
+    status: 'idle',
+    stepText: '',
+  });
 
   // Synchronization states
   const [isSyncing, setIsSyncing] = useState(false);
@@ -130,6 +139,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       youtubeAccessToken: (config.youtubeAccessToken || '').trim(),
       youtubeApiKey: config.youtubeApiKey.trim(),
       youtubePlaylistId: cleanPlaylistId,
+      githubToken: config.githubToken.trim(),
+      githubOwner: config.githubOwner.trim() || 'goliathappli',
+      githubRepo: config.githubRepo.trim() || 'Vid-o-saulchoir',
       autoSyncEnabled: true,
     };
     setConfig(normalizedConfig);
@@ -137,7 +149,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setConfigSavedToast(true);
     setTimeout(() => setConfigSavedToast(false), 2500);
 
-    // Automatically trigger synchronization as soon as OAuth/API/Playlist or GitHub data is saved
+    // If a GitHub token is present, run the visual GitHub progress bar verification & sync
+    if (normalizedConfig.githubToken) {
+      await runGitHubTokenSyncWithProgress(normalizedConfig);
+    }
+
+    // Automatically trigger full synchronization as soon as OAuth/API/Playlist or GitHub data is saved
     if (
       normalizedConfig.youtubeAccessToken ||
       (normalizedConfig.youtubeApiKey && normalizedConfig.youtubePlaylistId) ||
@@ -150,6 +167,99 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setSyncStatusMsg(result.message);
       setSyncLogs(storageService.getLogs());
       onCatalogUpdated(result.videos);
+    }
+  };
+
+  // Run step-by-step GitHub Token verification & push with visual progress bar (0% -> 100%)
+  const runGitHubTokenSyncWithProgress = async (cfg: SyncConfig = config) => {
+    setGhTesting(true);
+    setGhTestResult(null);
+
+    if (!cfg.githubToken || !cfg.githubToken.trim()) {
+      setGhSyncProgress({
+        percent: 100,
+        status: 'error',
+        stepText: 'Aucun Token GitHub renseigné. Veuillez coller votre code ghp_... ci-dessous.',
+      });
+      setGhTesting(false);
+      return;
+    }
+
+    try {
+      // Step 1: 25% - Verify Token & Repository Access
+      setGhSyncProgress({
+        percent: 25,
+        status: 'running',
+        stepText: 'Étape 1/3 : Vérification de la validité du Token GitHub...',
+      });
+
+      const testRes = await githubService.testConnection(
+        cfg.githubToken,
+        cfg.githubOwner || 'goliathappli',
+        cfg.githubRepo || 'Vid-o-saulchoir',
+        cfg.githubBranch || 'main',
+        cfg.githubFilePath || 'data/videos.json'
+      );
+
+      if (!testRes.success) {
+        setGhSyncProgress({
+          percent: 100,
+          status: 'error',
+          stepText: testRes.message,
+        });
+        setGhTestResult(testRes);
+        setGhTesting(false);
+        return;
+      }
+
+      // Step 2: 65% - Push / Sync catalog to GitHub repository
+      setGhSyncProgress({
+        percent: 65,
+        status: 'running',
+        stepText: `Étape 2/3 : Synchronisation du fichier ${cfg.githubFilePath || 'data/videos.json'} sur ${cfg.githubOwner}/${cfg.githubRepo}...`,
+      });
+
+      const currentVids = storageService.getVideos();
+      await githubService.pushVideos(
+        cfg.githubToken,
+        cfg.githubOwner || 'goliathappli',
+        cfg.githubRepo || 'Vid-o-saulchoir',
+        cfg.githubBranch || 'main',
+        cfg.githubFilePath || 'data/videos.json',
+        currentVids,
+        `Synchronisation GitHub vérifiée (${currentVids.length} vidéo(s))`
+      );
+
+      // Step 3: 100% - Complete!
+      const successMsg = `Synchronisation GitHub réussie à 100% avec le Token ! (${currentVids.length} vidéo(s) sauvegardée(s) sur ${cfg.githubOwner}/${cfg.githubRepo})`;
+      setGhSyncProgress({
+        percent: 100,
+        status: 'success',
+        stepText: successMsg,
+      });
+      setGhTestResult({
+        success: true,
+        message: successMsg,
+      });
+
+      storageService.saveConfig({
+        ...cfg,
+        githubToken: cfg.githubToken.trim(),
+      });
+      setSyncLogs(storageService.getLogs());
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la synchronisation GitHub';
+      setGhSyncProgress({
+        percent: 100,
+        status: 'error',
+        stepText: `Échec de la synchronisation GitHub : ${msg}`,
+      });
+      setGhTestResult({
+        success: false,
+        message: `Échec : ${msg}`,
+      });
+    } finally {
+      setGhTesting(false);
     }
   };
 
@@ -192,6 +302,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setIsSyncing(true);
       setSyncStatusMsg('Synchronisation OAuth 2.0 en cours...');
       const result = await syncManager.runFullSync(updatedConfig);
+      if (updatedConfig.githubToken) {
+        await runGitHubTokenSyncWithProgress(updatedConfig);
+      }
       setIsSyncing(false);
       setSyncStatusMsg(result.message);
       setSyncLogs(storageService.getLogs());
@@ -225,19 +338,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setYtTestResult(res);
   };
 
-  // Test GitHub connection
+  // Test & Synchronize GitHub connection with Progress Bar
   const handleTestGitHub = async () => {
-    setGhTesting(true);
-    setGhTestResult(null);
-    const res = await githubService.testConnection(
-      config.githubToken,
-      config.githubOwner,
-      config.githubRepo,
-      config.githubBranch,
-      config.githubFilePath
-    );
-    setGhTesting(false);
-    setGhTestResult(res);
+    await runGitHubTokenSyncWithProgress(config);
   };
 
   // Run full sync (YouTube -> Catalog -> GitHub)
@@ -777,30 +880,62 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                   {/* GitHub Section */}
                   <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5 space-y-4">
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
                       <div className="flex items-center gap-2 text-zinc-200 font-medium text-sm">
                         <FolderGit2 className="w-4 h-4 text-purple-400" />
                         <span>Dépôt GitHub de Synchronisation</span>
+                        {ghSyncProgress.status === 'success' && (
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono">
+                            Synchronisé à 100%
+                          </span>
+                        )}
                       </div>
                       <button
                         type="button"
                         onClick={handleTestGitHub}
                         disabled={ghTesting}
-                        className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow disabled:opacity-50"
                       >
-                        <RefreshCw className={`w-3 h-3 ${ghTesting ? 'animate-spin' : ''}`} />
-                        <span>Tester la connexion GitHub</span>
+                        <RefreshCw className={`w-3.5 h-3.5 ${ghTesting ? 'animate-spin' : ''}`} />
+                        <span>
+                          {ghTesting ? 'Synchronisation GitHub...' : 'Vérifier & Synchroniser avec le Token'}
+                        </span>
                       </button>
                     </div>
 
-                    {ghTestResult && (
-                      <div className={`p-3 rounded text-xs flex items-center gap-2 ${
-                        ghTestResult.success
-                          ? 'bg-emerald-950/60 border border-emerald-600/30 text-emerald-300'
-                          : 'bg-red-950/60 border border-red-600/30 text-red-300'
-                      }`}>
-                        {ghTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                        <span>{ghTestResult.message}</span>
+                    {/* Visual Progress Bar for GitHub Token Synchronization */}
+                    {ghSyncProgress.status !== 'idle' && (
+                      <div className="p-4 rounded-lg bg-zinc-950/90 border border-white/10 space-y-2.5 animate-in fade-in">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={`font-semibold flex items-center gap-2 ${
+                            ghSyncProgress.status === 'success'
+                              ? 'text-emerald-400'
+                              : ghSyncProgress.status === 'error'
+                              ? 'text-red-400'
+                              : 'text-amber-300'
+                          }`}>
+                            {ghSyncProgress.status === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                            {ghSyncProgress.status === 'error' && <AlertCircle className="w-4 h-4 shrink-0" />}
+                            {ghSyncProgress.status === 'running' && <RefreshCw className="w-4 h-4 animate-spin shrink-0" />}
+                            <span>{ghSyncProgress.stepText}</span>
+                          </span>
+                          <span className="font-mono font-bold text-xs text-zinc-200">
+                            {ghSyncProgress.status === 'error' ? 'Échec' : `${ghSyncProgress.percent}%`}
+                          </span>
+                        </div>
+
+                        <div className="w-full h-3 bg-zinc-900 rounded-full overflow-hidden border border-white/10 p-0.5">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              ghSyncProgress.status === 'success'
+                                ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.6)]'
+                                : ghSyncProgress.status === 'error'
+                                ? 'bg-gradient-to-r from-red-600 to-red-500'
+                                : 'bg-gradient-to-r from-purple-500 via-amber-400 to-amber-300 animate-pulse'
+                            }`}
+                            style={{ width: `${ghSyncProgress.percent}%` }}
+                          />
+                        </div>
                       </div>
                     )}
 
