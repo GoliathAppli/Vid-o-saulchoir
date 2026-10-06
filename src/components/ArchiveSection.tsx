@@ -180,42 +180,63 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* 3 MAIN CATEGORIES ("Vidéos d'atelier", "Vidéos avec Vaulx", "Pom's D'or") */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
           {VIDEO_CATEGORIES.map(category => {
             const isSelected = selectedCategory === category;
             const isPomsDor = category === "Pom's D'or";
+            const isAtelier = category === "Vidéos d'atelier";
             const count = categoryCounts[category] || 0;
 
             return (
               <div
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`relative rounded-xl p-5 border transition-all duration-300 cursor-pointer flex flex-col items-center justify-between text-center gap-3 ${
+                className={`group relative rounded-2xl p-6 border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between text-center gap-3.5 ${
                   isSelected
-                    ? 'bg-gradient-to-b from-amber-500/20 via-zinc-900/90 to-zinc-950 border-amber-400/70 shadow-lg shadow-amber-950/30'
-                    : 'bg-zinc-950/70 hover:bg-zinc-900/70 border-white/10 hover:border-amber-500/30'
+                    ? 'bg-gradient-to-b from-amber-500/30 via-amber-950/40 to-zinc-950 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.35)] -translate-y-1 scale-[1.02]'
+                    : 'bg-gradient-to-b from-zinc-900/90 to-zinc-950 hover:from-zinc-800/90 hover:to-zinc-900 border-amber-500/30 hover:border-amber-400/70 shadow-xl shadow-black/60 hover:-translate-y-1'
                 }`}
               >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center justify-center gap-2.5">
+                {/* Top luminous indicator bar */}
+                <span
+                  className={`w-16 h-1 rounded-full transition-all duration-300 ${
+                    isSelected
+                      ? 'bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.9)] w-24'
+                      : 'bg-amber-500/30 group-hover:bg-amber-400/60'
+                  }`}
+                />
+
+                <div className="flex flex-col items-center gap-2.5">
+                  <div className="flex items-center justify-center gap-3">
                     {isPomsDor ? (
-                      <GoldenAppleDrawing className="w-8 h-8 drop-shadow-[0_0_8px_rgba(245,197,66,0.5)]" />
+                      <GoldenAppleDrawing className="w-9 h-9 drop-shadow-[0_0_10px_rgba(245,197,66,0.65)]" />
+                    ) : isAtelier ? (
+                      <span className="text-2xl sm:text-3xl leading-none drop-shadow-[0_2px_8px_rgba(245,158,11,0.4)]" role="img" aria-label="Clap de cinéma">
+                        🎬
+                      </span>
                     ) : (
-                      <Film className={`w-5 h-5 ${isSelected ? 'text-amber-400' : 'text-zinc-400'}`} />
+                      <span className="text-2xl sm:text-3xl leading-none drop-shadow-[0_2px_8px_rgba(245,158,11,0.4)]" role="img" aria-label="Caméra">
+                        🎥
+                      </span>
                     )}
                     <h2
-                      className={`font-cinzel text-lg sm:text-xl font-bold tracking-wider uppercase ${
-                        isSelected ? 'text-amber-300' : 'text-zinc-100'
+                      className={`font-cinzel text-lg sm:text-xl font-bold tracking-wider uppercase transition-colors ${
+                        isSelected
+                          ? 'text-amber-200 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]'
+                          : 'text-zinc-100 group-hover:text-amber-200'
                       }`}
                     >
                       {category}
                     </h2>
-                    {isPomsDor && (
-                      <GoldenAppleDrawing className="w-8 h-8 drop-shadow-[0_0_8px_rgba(245,197,66,0.5)]" />
-                    )}
                   </div>
 
-                  <span className="text-xs font-mono text-zinc-400">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-mono font-semibold border transition-colors ${
+                      isSelected
+                        ? 'bg-amber-400 text-zinc-950 border-amber-300 shadow-sm'
+                        : 'bg-zinc-900/90 text-amber-300/90 border-amber-500/25 group-hover:border-amber-400/50'
+                    }`}
+                  >
                     {count} {count > 1 ? 'vidéos classées' : 'vidéo classée'}
                   </span>
                 </div>
@@ -225,7 +246,7 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                   <button
                     type="button"
                     onClick={(e) => handleOpenCategoryPicker(category, e)}
-                    className="mt-1 px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
+                    className="mt-1 px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ajouter</span>
@@ -276,11 +297,20 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
         {/* Selected Category Title Banner */}
         <div className="flex flex-col items-center justify-center text-center mb-12">
           <div className="flex items-center justify-center gap-3">
-            {selectedCategory === "Pom's D'or" && <GoldenAppleDrawing className="w-9 h-9" />}
+            {selectedCategory === "Pom's D'or" ? (
+              <GoldenAppleDrawing className="w-9 h-9" />
+            ) : selectedCategory === "Vidéos d'atelier" ? (
+              <span className="text-2xl sm:text-3xl leading-none" role="img" aria-label="Clap de cinéma">
+                🎬
+              </span>
+            ) : (
+              <span className="text-2xl sm:text-3xl leading-none" role="img" aria-label="Caméra">
+                🎥
+              </span>
+            )}
             <h2 className="font-cinzel text-2xl sm:text-3xl font-bold text-amber-300 tracking-widest uppercase">
               {selectedCategory}
             </h2>
-            {selectedCategory === "Pom's D'or" && <GoldenAppleDrawing className="w-9 h-9" />}
           </div>
           <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent mt-3" />
         </div>
