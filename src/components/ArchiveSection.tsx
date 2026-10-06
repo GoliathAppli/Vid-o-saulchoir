@@ -375,103 +375,40 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
 
                           {/* Grid of video cards for this month */}
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {monthGroup.videos.map(video => {
-                              const pubDate = new Date(video.publishedAt);
-                              const formattedDate = !isNaN(pubDate.getTime())
-                                ? pubDate.toLocaleDateString('fr-FR', {
-                                    day: 'numeric',
-                                    month: 'long',
-                                  })
-                                : '';
+                            {monthGroup.videos.map(video => (
+                              <article
+                                key={video.id}
+                                onClick={() => onSelectVideo(video)}
+                                className="group bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 rounded-lg overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/50 text-center"
+                              >
+                                {/* 16:9 Thumbnail container */}
+                                <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
+                                  <img
+                                    src={video.thumbnailUrl}
+                                    alt={video.title}
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90 group-hover:brightness-100"
+                                  />
 
-                              const vidCat = normalizeVideoCategory(video.genre);
+                                  {/* Vignette Scrim */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
 
-                              return (
-                                <article
-                                  key={video.id}
-                                  onClick={() => onSelectVideo(video)}
-                                  className="group bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 rounded-lg overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/50 text-center"
-                                >
-                                  {/* 16:9 Thumbnail container */}
-                                  <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
-                                    <img
-                                      src={video.thumbnailUrl}
-                                      alt={video.title}
-                                      referrerPolicy="no-referrer"
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90 group-hover:brightness-100"
-                                    />
-
-                                    {/* Vignette Scrim */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-                                    {/* Play icon overlay on hover */}
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                      <div className="w-12 h-12 rounded-full bg-amber-500 text-zinc-950 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform pl-0.5">
-                                        <Play className="w-5 h-5 fill-current" />
-                                      </div>
-                                    </div>
-
-                                    {/* Badges on thumbnail */}
-                                    <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-[11px] text-zinc-200">
-                                      {video.duration ? (
-                                        <span className="font-mono bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded border border-white/10">
-                                          {video.duration}
-                                        </span>
-                                      ) : <span />}
-
-                                      {video.isUnlisted && (
-                                        <span className="flex items-center gap-1 bg-amber-950/80 text-amber-300 backdrop-blur-sm px-2 py-0.5 rounded border border-amber-600/30">
-                                          <EyeOff className="w-3 h-3" />
-                                          Non répertorié
-                                        </span>
-                                      )}
+                                  {/* Play icon overlay on hover */}
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <div className="w-12 h-12 rounded-full bg-amber-500 text-zinc-950 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform pl-0.5">
+                                      <Play className="w-5 h-5 fill-current" />
                                     </div>
                                   </div>
+                                </div>
 
-                                  {/* Card content */}
-                                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                                    <div>
-                                      <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 mb-2">
-                                        <span className="inline-flex items-center gap-1 text-amber-300/90">
-                                          {vidCat === "Pom's D'or" && <GoldenAppleDrawing className="w-3.5 h-3.5" />}
-                                          {vidCat}
-                                        </span>
-                                        <span aria-hidden="true">·</span>
-                                        <span>{formattedDate}</span>
-                                      </div>
-
-                                      <h5 className="font-cinzel text-base sm:text-lg font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors line-clamp-1">
-                                        {video.title}
-                                      </h5>
-
-                                      <p className="text-xs text-zinc-400 line-clamp-2 mt-1.5 leading-relaxed">
-                                        {video.synopsis || video.description || 'Consulter la fiche du film.'}
-                                      </p>
-                                    </div>
-
-                                    {/* Card Footer: Director + Admin actions */}
-                                    <div className="pt-3 border-t border-white/5 flex items-center justify-center gap-2 text-xs text-zinc-400 flex-wrap">
-                                      <span className="truncate max-w-[200px]">
-                                        {video.director || 'Atelier du Saulchoir'}
-                                      </span>
-
-                                      {isAdmin && onEditVideo && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            onEditVideo(video);
-                                          }}
-                                          className="text-amber-400 hover:text-amber-300 underline underline-offset-2 ml-2 cursor-pointer"
-                                        >
-                                          Modifier
-                                        </button>
-                                      )}
-                                    </div>
-
-                                  </div>
-                                </article>
-                              );
-                            })}
+                                {/* Card content: Only Title */}
+                                <div className="p-4 flex items-center justify-center">
+                                  <h5 className="font-cinzel text-base sm:text-lg font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors">
+                                    {video.title}
+                                  </h5>
+                                </div>
+                              </article>
+                            ))}
                           </div>
 
                         </div>
