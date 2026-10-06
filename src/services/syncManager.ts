@@ -156,6 +156,18 @@ export const syncManager = {
               itemCount: currentVideos.length,
             });
           }
+
+          // Also push Actualité photos (data/news_photos.json) if any exist locally
+          const localPhotos = storageService.getNewsPhotos();
+          if (localPhotos.length > 0) {
+            await githubService.pushNewsPhotos(
+              config.githubToken,
+              config.githubOwner,
+              config.githubRepo,
+              config.githubBranch || 'main',
+              localPhotos
+            );
+          }
         } catch (ghErr) {
           hasError = true;
           const errMsg = ghErr instanceof Error ? ghErr.message : 'Erreur inconnue GitHub';

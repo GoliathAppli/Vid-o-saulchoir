@@ -6,13 +6,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NewsPhoto } from '../types/cinema';
 import {
-  Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon
+  Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon, CheckCircle2, Loader2, AlertCircle
 } from 'lucide-react';
 
 interface NewsCarouselSectionProps {
   photos: NewsPhoto[];
   isAdmin: boolean;
-  onUpdatePhotos: (updatedPhotos: NewsPhoto[]) => void;
+  onUpdatePhotos: (updatedPhotos: NewsPhoto[]) => Promise<{ syncedToGitHub: boolean; error?: string }> | void;
 }
 
 /**
@@ -59,6 +59,9 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [githubSyncStatus, setGithubSyncStatus] = useState<
+    { state: 'idle' | 'syncing' | 'success' | 'error'; message?: string }
+  >({ state: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Keep currentIndex in bounds if photos are deleted
@@ -79,6 +82,24 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
     return () => clearInterval(timer);
   }, [photos.length]);
 
+  const triggerUpdateWithFeedback = async (updated: NewsPhoto[]) => {
+    setGithubSyncStatus({ state: 'syncing', message: 'Synchronisation GitHub en cours...' });
+    const res = await onUpdatePhotos(updated);
+    if (res && res.syncedToGitHub) {
+      setGithubSyncStatus({
+        state: 'success',
+        message: 'Synchronisé sur GitHub (visible sur tous les ordinateurs)',
+      });
+    } else if (res && res.error) {
+      setGithubSyncStatus({
+        state: 'error',
+        message: res.error,
+      });
+    } else {
+      setGithubSyncStatus({ state: 'idle' });
+    }
+  };
+
   // Handle adding one or multiple photos from device
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -96,8 +117,8 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
         });
       }
       const updated = [...photos, ...newItems];
-      onUpdatePhotos(updated);
       setCurrentIndex(photos.length); // jump to first newly added photo
+      await triggerUpdateWithFeedback(updated);
     } catch (err) {
       console.error('Erreur lors du chargement des photos', err);
     } finally {
@@ -109,9 +130,9 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
   };
 
   // Handle deleting a photo in Admin mode
-  const handleDeletePhoto = (id: string) => {
+  const handleDeletePhoto = async (id: string) => {
     const updated = photos.filter(p => p.id !== id);
-    onUpdatePhotos(updated);
+    await triggerUpdateWithFeedback(updated);
   };
 
   const goPrev = () => {
@@ -140,28 +161,47 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
 
         {/* Admin Controls to insert one or multiple photos */}
         {isAdmin && (
-          <div className="mb-6 flex flex-wrap items-center justify-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFilesSelected}
-              className="hidden"
-            />
-            <button
-              type="button"
-              disabled={isUploading}
-              onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>
-                {isUploading
-                  ? 'Insertion des photos en cours...'
-                  : 'Insérer une ou plusieurs photos'}
-              </span>
-            </button>
+          <div className="mb-6 flex flex-col items-center justify-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>
+                  {isUploading
+                    ? 'Insertion des photos en cours...'
+                    : 'Insérer une ou plusieurs photos'}
+                </span>
+              </button>
+            </div>
+
+            {githubSyncStatus.state !== 'idle' && (
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border ${
+                  githubSyncStatus.state === 'syncing'
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    : githubSyncStatus.state === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-red-500/10 border-red-500/30 text-red-300'
+                }`}
+              >
+                {githubSyncStatus.state === 'syncing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {githubSyncStatus.state === 'success' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                {githubSyncStatus.state === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
+                <span>{githubSyncStatus.message}</span>
+              </div>
+            )}
           </div>
         )}
 

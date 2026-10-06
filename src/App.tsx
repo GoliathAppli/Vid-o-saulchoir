@@ -44,20 +44,31 @@ export default function App() {
   }, []);
 
   // Handler when Admin inserts or deletes Actualité photos
-  const handleUpdateNewsPhotos = useCallback((updatedPhotos: NewsPhoto[]) => {
+  const handleUpdateNewsPhotos = useCallback(async (updatedPhotos: NewsPhoto[]) => {
     setNewsPhotos(updatedPhotos);
     storageService.saveNewsPhotos(updatedPhotos);
 
     const cfg = storageService.getConfig();
     if (cfg.githubToken && cfg.githubOwner && cfg.githubRepo) {
-      githubService.pushNewsPhotos(
-        cfg.githubToken,
-        cfg.githubOwner,
-        cfg.githubRepo,
-        cfg.githubBranch || 'main',
-        updatedPhotos
-      ).catch(e => console.warn('Sync photos GitHub échoué', e));
+      try {
+        await githubService.pushNewsPhotos(
+          cfg.githubToken,
+          cfg.githubOwner,
+          cfg.githubRepo,
+          cfg.githubBranch || 'main',
+          updatedPhotos
+        );
+        return { syncedToGitHub: true };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erreur GitHub';
+        console.warn('Sync photos GitHub échoué', e);
+        return { syncedToGitHub: false, error: `Échec sync GitHub : ${msg}` };
+      }
     }
+    return {
+      syncedToGitHub: false,
+      error: 'Enregistré localement (ajoutez votre jeton GitHub dans Admin pour synchroniser sur tous les ordinateurs)',
+    };
   }, []);
 
   // Handler to move selected videos from "Vidéos d'atelier" into "Pom's D'or" or "Vidéos avec Vaulx"
