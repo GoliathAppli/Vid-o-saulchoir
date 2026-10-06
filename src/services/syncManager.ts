@@ -46,7 +46,17 @@ export const syncManager = {
               localMap.set(v.id, v);
             }
             for (const ghVid of ghPull.videos) {
-              localMap.set(ghVid.id, ghVid);
+              const existingLocal = localMap.get(ghVid.id);
+              const ghCat = normalizeVideoCategory(ghVid.genre);
+              const localCat = existingLocal ? normalizeVideoCategory(existingLocal.genre) : "Vidéos d'atelier";
+              const mergedGenre =
+                ghCat === "Vidéos d'atelier" && localCat !== "Vidéos d'atelier"
+                  ? localCat
+                  : ghCat;
+              localMap.set(ghVid.id, {
+                ...ghVid,
+                genre: mergedGenre,
+              });
             }
             currentVideos = Array.from(localMap.values());
             actionsTaken.push(`${ghPull.videos.length} vidéo(s) chargée(s) depuis GitHub`);

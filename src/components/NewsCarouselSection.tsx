@@ -185,21 +185,28 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
           </div>
         ) : (
           <div className="w-full space-y-4">
-            {/* Fixed-size Large Container so every photo has the exact same large dimensions */}
-            <div className="relative w-full h-[320px] sm:h-[480px] md:h-[560px] rounded-xl overflow-hidden bg-zinc-950 border border-white/10 shadow-2xl shadow-black/80 group">
+            {/* Fixed-size Large Container so every photo has the exact same large dimensions and is 100% visible */}
+            <div className="relative w-full h-[340px] sm:h-[500px] md:h-[600px] rounded-xl overflow-hidden bg-zinc-950 border border-white/10 shadow-2xl shadow-black/80 group">
               {photos.map((photo, index) => {
                 const isActive = index === currentIndex;
                 return (
                   <div
                     key={photo.id}
-                    className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out ${
+                    className={`absolute inset-0 w-full h-full flex items-center justify-center transition-opacity duration-700 ease-in-out ${
                       isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                     }`}
                   >
+                    {/* Subtle blurred ambient background so the frame always looks full while the photo is 100% visible */}
+                    <img
+                      src={photo.url}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110 pointer-events-none"
+                    />
                     <img
                       src={photo.url}
                       alt={`Actualité ${index + 1}`}
-                      className="w-full h-full object-cover"
+                      className="relative z-10 w-full h-full object-contain p-1 sm:p-2"
                     />
                   </div>
                 );

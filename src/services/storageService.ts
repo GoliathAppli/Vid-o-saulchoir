@@ -46,19 +46,37 @@ export const storageService = {
         localStorage.removeItem(STORAGE_KEYS.LEGACY_VIDEOS);
       }
 
+      const bundledList: VideoItem[] = Array.isArray(bundledVideosData)
+        ? (bundledVideosData as VideoItem[])
+        : [];
+      const bundledCategoryMap = new Map<string, string>();
+      for (const bv of bundledList) {
+        if (bv && bv.id && bv.genre) {
+          bundledCategoryMap.set(bv.id, normalizeVideoCategory(bv.genre));
+        }
+      }
+
       const stored = localStorage.getItem(STORAGE_KEYS.VIDEOS);
       if (stored) {
         const parsed: VideoItem[] = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(v => ({
-            ...v,
-            genre: normalizeVideoCategory(v.genre),
-          }));
+          return parsed.map(v => {
+            const localCat = normalizeVideoCategory(v.genre);
+            const bundledCat = bundledCategoryMap.get(v.id);
+            const finalGenre =
+              localCat === "Vidéos d'atelier" && bundledCat && bundledCat !== "Vidéos d'atelier"
+                ? bundledCat
+                : localCat;
+            return {
+              ...v,
+              genre: finalGenre,
+            };
+          });
         }
       }
 
-      if (Array.isArray(bundledVideosData) && bundledVideosData.length > 0) {
-        return (bundledVideosData as VideoItem[]).map(v => ({
+      if (bundledList.length > 0) {
+        return bundledList.map(v => ({
           ...v,
           genre: normalizeVideoCategory(v.genre),
         }));
