@@ -5,7 +5,7 @@
 
 import React, { useEffect } from 'react';
 import { VideoItem } from '../types/cinema';
-import { X, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 interface VideoModalProps {
   video: VideoItem | null;
@@ -36,23 +36,8 @@ export const VideoModal: React.FC<VideoModalProps> = ({
       {/* Backdrop click to close */}
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      {/* Modal Dialog: Only Video, Title, and Back Button */}
+      {/* Modal Dialog: Only Video, Title below, and Back Button */}
       <div className="relative z-10 w-full max-w-5xl bg-zinc-950 border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
-        
-        {/* Top bar with Title and Close button */}
-        <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-zinc-900/50">
-          <h2 className="font-cinzel text-lg sm:text-2xl text-zinc-100 font-bold tracking-wide truncate pr-4">
-            {video.title}
-          </h2>
-
-          <button
-            onClick={onClose}
-            aria-label="Fermer la fenêtre (Échap)"
-            className="p-1.5 text-zinc-400 hover:text-white rounded-md hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
         {/* Modal Body */}
         <div className="overflow-y-auto flex-1 p-4 sm:p-6 flex flex-col items-center space-y-6">
