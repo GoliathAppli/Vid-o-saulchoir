@@ -12,7 +12,7 @@ import { githubService } from '../services/githubService';
 import {
   Lock, KeyRound, Shield, CheckCircle2, AlertCircle, RefreshCw,
   FolderGit2, Youtube, Film, Download, Upload, Trash2, Eye, EyeOff,
-  Clock, X, Save, Copy, Check, Plus, Edit3, ArrowRight, Sparkles, Terminal
+  Clock, X, Save, Copy, Check, Plus, Edit3, ArrowRight, Sparkles, Terminal, ExternalLink
 } from 'lucide-react';
 
 interface AdminModalProps {
@@ -679,10 +679,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     {/* Step-by-step helper for creating the Google OAuth Client ID */}
-                    <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-amber-500/20 text-xs text-zinc-300 space-y-2">
-                      <div className="font-medium text-amber-300 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                        <span>Que mettre dans Google Cloud (« Créer un ID client OAuth ») ?</span>
+                    <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-amber-500/20 text-xs text-zinc-300 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-amber-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                          <span>Que mettre dans Google Cloud (« Créer un ID client OAuth ») ?</span>
+                        </div>
+                        <a
+                          href="https://console.cloud.google.com/apis/credentials"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 rounded text-[11px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Ouvrir Google Cloud en 1 clic</span>
+                        </a>
                       </div>
                       <ol className="list-decimal list-inside space-y-1 text-[11px] text-zinc-400">
                         <li>
@@ -795,9 +806,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          Jeton GitHub (Personal Access Token)
-                        </label>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                          <label className="block text-xs text-zinc-300 font-medium">
+                            Jeton GitHub (Personal Access Token)
+                          </label>
+                          <a
+                            href="https://github.com/settings/tokens/new?description=Atelier+Cinema+du+Saulchoir&scopes=repo"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-200 rounded text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Créer le Token GitHub en 1 clic</span>
+                          </a>
+                        </div>
                         <input
                           type="password"
                           value={config.githubToken}
@@ -806,7 +828,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
                         />
                         <p className="text-[11px] text-zinc-500 mt-1">
-                          Token avec portée <code>repo</code> ou <code>contents:write</code> pour permettre la sauvegarde automatique.
+                          Cliquez sur <strong>« Créer le Token GitHub en 1 clic »</strong> (les cases sont déjà pré-cochées), descendez en bas de la page GitHub, cliquez sur <em>Generate token</em> et collez le code <code>ghp_...</code> ici.
                         </p>
                       </div>
 
