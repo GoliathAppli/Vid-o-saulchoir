@@ -78,13 +78,6 @@ export interface YearGroup {
   totalVideos: number;
 }
 
-export interface NewsPhoto {
-  id: string;
-  url: string;
-  caption?: string;
-  addedAt: string;
-}
-
 export type CountdownDisplayMode = 'days' | 'days_hours';
 
 export interface NewsCountdown {
@@ -94,6 +87,14 @@ export interface NewsCountdown {
   displayMode: CountdownDisplayMode;
   label?: string;
   updatedAt?: string;
+}
+
+export interface NewsPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  addedAt: string;
+  countdown?: NewsCountdown;
 }
 
 export type SeasonalThemeId =

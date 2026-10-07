@@ -379,7 +379,7 @@ export const Header: React.FC<HeaderProps> = ({
               <option value="valentines" className="bg-zinc-950 text-zinc-200">💖 Saint-Valentin (11 fév – 14 fév)</option>
               <option value="easter" className="bg-zinc-950 text-zinc-200">🐰 Pâques (1er avr – 30 avr)</option>
               <option value="summer" className="bg-zinc-950 text-zinc-200">☀️ Vacances d'été (1er juil – 31 août)</option>
-              <option value="halloween" className="bg-zinc-950 text-zinc-200">🎃 Halloween (15 oct – 2 nov)</option>
+              <option value="halloween" className="bg-zinc-950 text-zinc-200">🎃 Halloween (1er oct – 2 nov)</option>
               <option value="christmas" className="bg-zinc-950 text-zinc-200">🎄 Noël (1er déc – 25 déc)</option>
               <option value="default" className="bg-zinc-950 text-zinc-200">✨ Standard (Hors fêtes)</option>
             </select>

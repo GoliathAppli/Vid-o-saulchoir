@@ -59,7 +59,7 @@ export const SEASONAL_THEMES: Record<SeasonalThemeId, SeasonalThemeInfo> = {
   halloween: {
     id: 'halloween',
     label: 'Halloween',
-    periodLabel: '15 oct – 2 nov',
+    periodLabel: '1er oct – 2 nov',
     titleClass: 'title-theme-halloween',
     headerBorderClass: 'border-orange-500/45',
   },
@@ -105,8 +105,8 @@ export function getSeasonalTheme(date: Date = new Date()): SeasonalThemeId {
     return 'summer';
   }
 
-  // 6. Halloween (15 oct - 2 nov)
-  if ((month === 9 && day >= 15) || (month === 10 && day <= 2)) {
+  // 6. Halloween (1er oct - 2 nov)
+  if ((month === 9 && day >= 1) || (month === 10 && day <= 2)) {
     return 'halloween';
   }
 
