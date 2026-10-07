@@ -1,7 +1,8 @@
 {
   "enabled": true,
-  "targetDate": "2026-10-18",
+  "targetDate": "2026-11-18",
   "targetTime": "20:00",
   "displayMode": "days",
-  "updatedAt": "2026-10-07T15:29:45.990Z"
+  "label": "Avant l'événement",
+  "updatedAt": "2026-10-07T15:30:01.242Z"
 }
