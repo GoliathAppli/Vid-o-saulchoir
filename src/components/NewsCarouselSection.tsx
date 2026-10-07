@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NewsPhoto, NewsCountdown } from '../types/cinema';
 import {
   Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon,
-  CheckCircle2, Loader2, AlertCircle, Clock, Calendar, Timer, ChevronUp
+  CheckCircle2, Loader2, AlertCircle, Clock, Timer, ChevronUp, RefreshCw, Cloud
 } from 'lucide-react';
 
 interface NewsCarouselSectionProps {
@@ -506,30 +506,6 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
                     </button>
                   </>
                 )}
-
-                {/* Carousel Dots Indicator inside top-right or bottom of image */}
-                {photos.length > 1 && (
-                  <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/70 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 shadow-lg">
-                    {photos.map((photo, idx) => {
-                      const hasCd = getCountdownForPhoto(photo, idx).enabled && Boolean(getCountdownForPhoto(photo, idx).targetDate);
-                      return (
-                        <button
-                          key={photo.id}
-                          type="button"
-                          onClick={() => setCurrentIndex(idx)}
-                          aria-label={`Aller à l'affiche ${idx + 1}`}
-                          className={`h-2 rounded-full transition-all cursor-pointer ${
-                            idx === safeIndex
-                              ? 'w-7 bg-amber-400 shadow-[0_0_8px_#fbbf24]'
-                              : hasCd
-                              ? 'w-2.5 bg-amber-300/60 hover:bg-amber-300'
-                              : 'w-2 bg-white/40 hover:bg-white/70'
-                          }`}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               {/* BOTTOM PART: Integrated Poster Countdown Pedestal (Directly fused to the poster above) */}
@@ -892,6 +868,51 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Dedicated Countdown Synchronization Status Bar & Button */}
+            <div className="mt-4 pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {githubSyncStatus.state === 'syncing' ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-amber-300 text-xs font-medium">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-amber-400" />
+                    <span>Synchronisation de la date du compteur en cours...</span>
+                  </div>
+                ) : githubSyncStatus.state === 'success' ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>
+                      {githubSyncStatus.message || 'Date du compteur synchronisée (visible sur tous les appareils)'}
+                    </span>
+                  </div>
+                ) : githubSyncStatus.state === 'error' ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-400/40 text-red-300 text-xs font-medium">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+                    <span>{githubSyncStatus.message}</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/80 border border-white/10 text-zinc-300 text-xs">
+                    <Cloud className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>
+                      {activeCountdown.updatedAt
+                        ? `Compteur enregistré le ${new Date(activeCountdown.updatedAt).toLocaleDateString('fr-FR')} à ${new Date(activeCountdown.updatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+                        : 'La date se synchronise automatiquement dès que vous la modifiez'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={githubSyncStatus.state === 'syncing'}
+                onClick={() => applyCountdownChange({})}
+                className="px-3.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${githubSyncStatus.state === 'syncing' ? 'animate-spin' : ''}`}
+                />
+                <span>Synchroniser le compteur</span>
+              </button>
             </div>
           </div>
         )}
