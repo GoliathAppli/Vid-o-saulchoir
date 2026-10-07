@@ -55,6 +55,11 @@ function resizeImageFile(file: File, maxWidth = 1600, quality = 0.85): Promise<s
   });
 }
 
+const FRENCH_MONTH_NAMES = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+];
+
 export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
   photos,
   isAdmin,
@@ -69,22 +74,29 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
   >({ state: 'idle' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Local draft state for Admin countdown settings
-  const [draftEnabled, setDraftEnabled] = useState<boolean>(countdown.enabled);
-  const [draftDate, setDraftDate] = useState<string>(countdown.targetDate || '');
-  const [draftTime, setDraftTime] = useState<string>(countdown.targetTime || '20:00');
-  const [draftMode, setDraftMode] = useState<CountdownDisplayMode>(countdown.displayMode || 'days');
-  const [draftLabel, setDraftLabel] = useState<string>(countdown.label ?? "Avant l'événement");
   const [nowTick, setNowTick] = useState<Date>(() => new Date());
 
-  // Sync draft state when countdown prop updates (e.g. pulled from GitHub)
-  useEffect(() => {
-    setDraftEnabled(countdown.enabled);
-    setDraftDate(countdown.targetDate || '');
-    setDraftTime(countdown.targetTime || '20:00');
-    setDraftMode(countdown.displayMode || 'days');
-    setDraftLabel(countdown.label ?? "Avant l'événement");
-  }, [countdown]);
+  // Parse current targetDate (YYYY-MM-DD) or default to today's year/month/day for the selectors
+  const parsedDateParts = (() => {
+    if (countdown.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(countdown.targetDate)) {
+      const [y, m, d] = countdown.targetDate.split('-').map(Number);
+      return { year: y, month: m, day: d };
+    }
+    const today = new Date();
+    return {
+      year: today.getFullYear(),
+      month: today.getMonth() + 1,
+      day: today.getDate(),
+    };
+  })();
+
+  const parsedTimeParts = (() => {
+    if (countdown.targetTime && /^\d{2}:\d{2}$/.test(countdown.targetTime)) {
+      const [h, m] = countdown.targetTime.split(':').map(Number);
+      return { hour: h, minute: m };
+    }
+    return { hour: 20, minute: 0 };
+  })();
 
   // Live clock tick every 15 seconds so days/hours stay accurate in real time
   useEffect(() => {
@@ -130,28 +142,23 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
     }
   };
 
-  const handleSaveCountdown = async (override?: Partial<NewsCountdown>) => {
+  // Automatically save & activate countdown whenever Admin changes date, time, or display mode
+  const applyCountdownChange = async (changes: Partial<NewsCountdown>) => {
+    const fallbackDate = `${parsedDateParts.year}-${String(parsedDateParts.month).padStart(2, '0')}-${String(parsedDateParts.day).padStart(2, '0')}`;
     const nextCountdown: NewsCountdown = {
-      enabled: override?.enabled !== undefined ? override.enabled : draftEnabled,
-      targetDate: override?.targetDate !== undefined ? override.targetDate : draftDate,
-      targetTime: override?.targetTime !== undefined ? override.targetTime : draftTime,
-      displayMode: override?.displayMode !== undefined ? override.displayMode : draftMode,
-      label: override?.label !== undefined ? override.label : draftLabel,
+      enabled: changes.enabled !== undefined ? changes.enabled : true,
+      targetDate: changes.targetDate !== undefined ? changes.targetDate : (countdown.targetDate || fallbackDate),
+      targetTime: changes.targetTime !== undefined ? changes.targetTime : (countdown.targetTime || '20:00'),
+      displayMode: changes.displayMode !== undefined ? changes.displayMode : (countdown.displayMode || 'days'),
       updatedAt: new Date().toISOString(),
     };
 
-    // If Admin sets a date and clicks Save, automatically enable it unless explicitly disabling
-    if (override?.enabled === undefined && nextCountdown.targetDate && !nextCountdown.enabled) {
-      nextCountdown.enabled = true;
-      setDraftEnabled(true);
-    }
-
-    setGithubSyncStatus({ state: 'syncing', message: 'Synchronisation du compte à rebours sur GitHub...' });
+    setGithubSyncStatus({ state: 'syncing', message: 'Synchronisation du compte à rebours...' });
     const res = await onUpdateCountdown(nextCountdown);
     if (res && res.syncedToGitHub) {
       setGithubSyncStatus({
         state: 'success',
-        message: 'Compte à rebours synchronisé sur GitHub (visible par tous les visiteurs)',
+        message: 'Compte à rebours synchronisé sur GitHub',
       });
     } else if (res && res.error) {
       setGithubSyncStatus({
@@ -163,7 +170,31 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
     }
   };
 
-  // Compute remaining days and hours from active countdown
+  const handleDatePartChange = (part: 'day' | 'month' | 'year', val: number) => {
+    const nextYear = part === 'year' ? val : parsedDateParts.year;
+    const nextMonth = part === 'month' ? val : parsedDateParts.month;
+    const maxDaysInMonth = new Date(nextYear, nextMonth, 0).getDate();
+    const rawDay = part === 'day' ? val : parsedDateParts.day;
+    const nextDay = Math.min(rawDay, maxDaysInMonth);
+
+    const formattedDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`;
+    applyCountdownChange({
+      enabled: true,
+      targetDate: formattedDate,
+    });
+  };
+
+  const handleTimePartChange = (part: 'hour' | 'minute', val: number) => {
+    const nextHour = part === 'hour' ? val : parsedTimeParts.hour;
+    const nextMinute = part === 'minute' ? val : parsedTimeParts.minute;
+    const formattedTime = `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
+    applyCountdownChange({
+      enabled: true,
+      targetTime: formattedTime,
+    });
+  };
+
+  // Compute remaining days and hours automatically from current date (nowTick)
   const computeRemaining = () => {
     const activeDate = countdown.targetDate;
     if (!activeDate) return null;
@@ -464,7 +495,7 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
               {/* Header label */}
               <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 text-xs sm:text-sm font-cinzel font-bold tracking-[0.2em] uppercase">
                 <Timer className="w-4 h-4 text-amber-400 animate-pulse" />
-                <span>{countdown.label?.trim() || "Compte à rebours de l'événement"}</span>
+                <span>Compte à rebours</span>
               </div>
 
               {/* Countdown Counter Blocks */}
@@ -525,7 +556,7 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
               {/* Formatted Target Event Date Badge */}
               <div className="inline-flex items-center gap-2 text-xs sm:text-sm text-zinc-300 bg-zinc-900/90 border border-white/10 px-4 py-1.5 rounded-full">
                 <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="capitalize">{remaining.formattedTarget}</span>
+                <span className="capitalize">Événement : {remaining.formattedTarget}</span>
               </div>
             </div>
           </div>
@@ -533,16 +564,16 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
 
         {/* ADMIN CONFIGURATION PANEL FOR THE VISUAL COUNTDOWN (Under the photo) */}
         {isAdmin && (
-          <div className="w-full mt-6 rounded-xl bg-zinc-900/80 border border-amber-500/35 p-4 sm:p-5 shadow-xl">
+          <div className="w-full mt-6 rounded-xl bg-zinc-900/85 border border-amber-500/35 p-4 sm:p-5 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
               <div className="flex items-center gap-2.5">
                 <Clock className="w-5 h-5 text-amber-400 shrink-0" />
                 <div>
                   <h3 className="font-cinzel text-sm sm:text-base font-bold text-amber-200 uppercase tracking-wider">
-                    Réglage du compte à rebours (Mode Admin)
+                    Compte à rebours de l'événement (Mode Admin)
                   </h3>
                   <p className="text-[11px] text-zinc-400">
-                    Choisissez la date de l'événement affiché dans l'actualité et le format d'affichage pour les visiteurs.
+                    Choisissez simplement la date de l'événement : le nombre de jours (et d'heures) restants se calcule automatiquement à partir d'aujourd'hui.
                   </p>
                 </div>
               </div>
@@ -551,37 +582,89 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const nextEnabled = !draftEnabled;
-                  setDraftEnabled(nextEnabled);
-                  handleSaveCountdown({ enabled: nextEnabled });
+                  const nextEnabled = !countdown.enabled;
+                  applyCountdownChange({ enabled: nextEnabled });
                 }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-                  draftEnabled
+                  countdown.enabled
                     ? 'bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 hover:bg-emerald-500/30'
                     : 'bg-zinc-800 border border-white/15 text-zinc-300 hover:bg-zinc-700'
                 }`}
               >
                 <span
                   className={`w-2.5 h-2.5 rounded-full ${
-                    draftEnabled ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-zinc-500'
+                    countdown.enabled ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-zinc-500'
                   }`}
                 />
-                <span>{draftEnabled ? 'Compte à rebours actif' : 'Compte à rebours masqué'}</span>
+                <span>{countdown.enabled ? 'Compte à rebours affiché (cliquer pour masquer)' : 'Activer le compte à rebours'}</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
-              {/* 1. Display Mode: Jour vs Jour et Heure */}
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-4 items-end">
+              {/* 1. Date de l'événement (Jour / Mois / Année) */}
+              <div className="md:col-span-6 space-y-1.5">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+                  Date de l'événement (calcul automatique)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Jour */}
+                  <select
+                    aria-label="Jour de l'événement"
+                    value={parsedDateParts.day}
+                    onChange={e => handleDatePartChange('day', Number(e.target.value))}
+                    className="w-full bg-zinc-950 border border-amber-500/40 hover:border-amber-400 focus:border-amber-400 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer"
+                  >
+                    {Array.from(
+                      { length: new Date(parsedDateParts.year, parsedDateParts.month, 0).getDate() },
+                      (_, i) => i + 1
+                    ).map(dayNum => (
+                      <option key={dayNum} value={dayNum} className="bg-zinc-900 text-zinc-100">
+                        {String(dayNum).padStart(2, '0')}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Mois */}
+                  <select
+                    aria-label="Mois de l'événement"
+                    value={parsedDateParts.month}
+                    onChange={e => handleDatePartChange('month', Number(e.target.value))}
+                    className="w-full bg-zinc-950 border border-amber-500/40 hover:border-amber-400 focus:border-amber-400 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer"
+                  >
+                    {FRENCH_MONTH_NAMES.map((mName, idx) => (
+                      <option key={mName} value={idx + 1} className="bg-zinc-900 text-zinc-100">
+                        {mName}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Année */}
+                  <select
+                    aria-label="Année de l'événement"
+                    value={parsedDateParts.year}
+                    onChange={e => handleDatePartChange('year', Number(e.target.value))}
+                    className="w-full bg-zinc-950 border border-amber-500/40 hover:border-amber-400 focus:border-amber-400 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer"
+                  >
+                    {Array.from({ length: 7 }, (_, i) => new Date().getFullYear() + i).map(yr => (
+                      <option key={yr} value={yr} className="bg-zinc-900 text-zinc-100">
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 2. Mode d'affichage : En jours uniquement vs En jours et heures */}
+              <div className="md:col-span-3 space-y-1.5">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
-                  Mode d'affichage
+                  Affichage du compteur
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setDraftMode('days')}
+                    onClick={() => applyCountdownChange({ enabled: true, displayMode: 'days' })}
                     className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
-                      draftMode === 'days'
+                      (countdown.displayMode || 'days') === 'days'
                         ? 'bg-amber-500 text-zinc-950 border-amber-400 font-semibold shadow'
                         : 'bg-zinc-950 text-zinc-300 border-white/10 hover:border-amber-500/40'
                     }`}
@@ -590,9 +673,9 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDraftMode('days_hours')}
+                    onClick={() => applyCountdownChange({ enabled: true, displayMode: 'days_hours' })}
                     className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
-                      draftMode === 'days_hours'
+                      countdown.displayMode === 'days_hours'
                         ? 'bg-amber-500 text-zinc-950 border-amber-400 font-semibold shadow'
                         : 'bg-zinc-950 text-zinc-300 border-white/10 hover:border-amber-500/40'
                     }`}
@@ -602,76 +685,41 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
                 </div>
               </div>
 
-              {/* 2. Target Event Date */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
-                  Date de l'événement
-                </label>
-                <input
-                  type="date"
-                  value={draftDate}
-                  onChange={e => setDraftDate(e.target.value)}
-                  className="w-full bg-zinc-950 border border-white/15 focus:border-amber-400 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none"
-                />
-              </div>
-
-              {/* 3. Target Event Time (shown when 'days_hours' is selected) */}
-              {draftMode === 'days_hours' ? (
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+              {/* 3. Heure de l'événement (uniquement si "Jours & Heures" est choisi) */}
+              {countdown.displayMode === 'days_hours' && (
+                <div className="md:col-span-3 space-y-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-300">
                     Heure de l'événement
                   </label>
-                  <input
-                    type="time"
-                    value={draftTime}
-                    onChange={e => setDraftTime(e.target.value)}
-                    className="w-full bg-zinc-950 border border-white/15 focus:border-amber-400 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
-                    Intitulé au-dessus du compteur
-                  </label>
-                  <input
-                    type="text"
-                    value={draftLabel}
-                    onChange={e => setDraftLabel(e.target.value)}
-                    placeholder="Ex: Avant l'événement"
-                    className="w-full bg-zinc-950 border border-white/15 focus:border-amber-400 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      aria-label="Heure de l'événement"
+                      value={parsedTimeParts.hour}
+                      onChange={e => handleTimePartChange('hour', Number(e.target.value))}
+                      className="w-full bg-zinc-950 border border-amber-500/40 hover:border-amber-400 focus:border-amber-400 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer"
+                    >
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={h} className="bg-zinc-900 text-zinc-100">
+                          {String(h).padStart(2, '0')} h
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="Minutes de l'événement"
+                      value={parsedTimeParts.minute}
+                      onChange={e => handleTimePartChange('minute', Number(e.target.value))}
+                      className="w-full bg-zinc-950 border border-amber-500/40 hover:border-amber-400 focus:border-amber-400 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold text-zinc-100 focus:outline-none cursor-pointer"
+                    >
+                      {[0, 15, 30, 45].map(m => (
+                        <option key={m} value={m} className="bg-zinc-900 text-zinc-100">
+                          {String(m).padStart(2, '0')} min
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
-
-              {/* 4. Save / Apply Button */}
-              <div className="flex flex-col justify-end">
-                <button
-                  type="button"
-                  disabled={!draftDate}
-                  onClick={() => handleSaveCountdown({ enabled: true })}
-                  className="w-full px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-                >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>Enregistrer & Afficher</span>
-                </button>
-              </div>
             </div>
-
-            {/* Optional custom label row when in 'days_hours' mode */}
-            {draftMode === 'days_hours' && (
-              <div className="mt-3 pt-3 border-t border-white/5 flex flex-col sm:flex-row items-center gap-3">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 shrink-0">
-                  Intitulé du compte à rebours :
-                </label>
-                <input
-                  type="text"
-                  value={draftLabel}
-                  onChange={e => setDraftLabel(e.target.value)}
-                  placeholder="Ex: Avant l'événement"
-                  className="w-full sm:max-w-xs bg-zinc-950 border border-white/15 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none"
-                />
-              </div>
-            )}
           </div>
         )}
 
