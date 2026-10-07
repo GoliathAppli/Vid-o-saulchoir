@@ -254,8 +254,15 @@ export const githubService = {
       headers['Authorization'] = `token ${token.trim()}`;
     }
 
-    const res = await fetch(url, { headers });
-    if (!res.ok) return [];
+    const res = await fetch(url, { headers, cache: 'no-store' });
+    if (!res.ok) {
+      // Fallback to raw.githubusercontent.com for unauthenticated visitors if API rate limit is reached
+      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+      if (!rawRes.ok) return [];
+      const rawParsed = await rawRes.json();
+      return Array.isArray(rawParsed) ? rawParsed : [];
+    }
     const data = await res.json();
     if (!data.content) return [];
     const decoded = b64DecodeUnicode(data.content);
@@ -327,8 +334,14 @@ export const githubService = {
       headers['Authorization'] = `token ${token.trim()}`;
     }
 
-    const res = await fetch(url, { headers });
-    if (!res.ok) return null;
+    const res = await fetch(url, { headers, cache: 'no-store' });
+    if (!res.ok) {
+      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+      if (!rawRes.ok) return null;
+      const rawParsed = await rawRes.json();
+      return rawParsed && typeof rawParsed === 'object' ? (rawParsed as NewsCountdown) : null;
+    }
     const data = await res.json();
     if (!data.content) return null;
     const decoded = b64DecodeUnicode(data.content);

@@ -5,6 +5,8 @@
 
 import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, NewsCountdown, normalizeVideoCategory } from '../types/cinema';
 import bundledVideosData from '../../data/videos.json';
+import bundledNewsPhotosData from '../../data/news_photos.json';
+import bundledNewsCountdownData from '../../data/news_countdown.json';
 
 const STORAGE_KEYS = {
   LEGACY_VIDEOS: 'atelier_cinema_videos_catalog',
@@ -118,9 +120,12 @@ export const storageService = {
       const stored = localStorage.getItem(STORAGE_KEYS.NEWS_PHOTOS);
       if (stored) {
         const parsed: NewsPhoto[] = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
+      }
+      if (Array.isArray(bundledNewsPhotosData) && bundledNewsPhotosData.length > 0) {
+        return bundledNewsPhotosData as NewsPhoto[];
       }
     } catch (e) {
       console.error('Erreur lecture photos actualité', e);
@@ -141,12 +146,18 @@ export const storageService = {
       const stored = localStorage.getItem(STORAGE_KEYS.NEWS_COUNTDOWN);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object') {
+        if (parsed && typeof parsed === 'object' && parsed.targetDate) {
           return {
             ...DEFAULT_COUNTDOWN,
             ...parsed,
           };
         }
+      }
+      if (bundledNewsCountdownData && typeof bundledNewsCountdownData === 'object') {
+        return {
+          ...DEFAULT_COUNTDOWN,
+          ...(bundledNewsCountdownData as Partial<NewsCountdown>),
+        };
       }
     } catch (e) {
       console.error('Erreur lecture compte à rebours actualité', e);
