@@ -550,21 +550,16 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
                             </span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-3.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.28)]">
+                          <div className="flex items-center justify-center gap-3.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.28)]">
                             <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-widest text-amber-400/90">
                               Dans
                             </span>
                             <span className="font-cinzel text-3xl sm:text-5xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_12px_rgba(251,191,36,0.55)]">
                               {remaining.days}
                             </span>
-                            <div className="flex flex-col text-left leading-tight">
-                              <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-[0.18em] text-amber-300">
-                                {remaining.days > 1 ? 'Jours' : 'Jour'}
-                              </span>
-                              <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
-                                {remaining.days > 1 ? 'restants' : 'restant'}
-                              </span>
-                            </div>
+                            <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-[0.18em] text-amber-300 text-center">
+                              {remaining.days > 1 ? 'Jours' : 'Jour'}
+                            </span>
                           </div>
                         )
                       ) : (
