@@ -85,6 +85,17 @@ export interface NewsPhoto {
   addedAt: string;
 }
 
+export type CountdownDisplayMode = 'days' | 'days_hours';
+
+export interface NewsCountdown {
+  enabled: boolean;
+  targetDate: string; // YYYY-MM-DD
+  targetTime?: string; // HH:mm (used when displayMode === 'days_hours')
+  displayMode: CountdownDisplayMode;
+  label?: string;
+  updatedAt?: string;
+}
+
 export type SeasonalThemeId =
   | 'default'
   | 'new_year'

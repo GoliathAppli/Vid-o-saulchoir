@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, NewsPhoto } from '../types/cinema';
+import { VideoItem, NewsPhoto, NewsCountdown } from '../types/cinema';
 
 function b64DecodeUnicode(str: string): string {
   // Safe base64 decoding supporting UTF-8 characters (accents, quotes, etc.)
@@ -307,6 +307,84 @@ export const githubService = {
       headers,
       body: JSON.stringify(payload),
     });
+  },
+
+  /**
+   * Pull data/news_countdown.json from GitHub
+   */
+  async pullNewsCountdown(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main'
+  ): Promise<NewsCountdown | null> {
+    const cleanPath = 'data/news_countdown.json';
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+    };
+    if (token && token.trim()) {
+      headers['Authorization'] = `token ${token.trim()}`;
+    }
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.content) return null;
+    const decoded = b64DecodeUnicode(data.content);
+    const parsed = JSON.parse(decoded);
+    return parsed && typeof parsed === 'object' ? (parsed as NewsCountdown) : null;
+  },
+
+  /**
+   * Push data/news_countdown.json to GitHub
+   */
+  async pushNewsCountdown(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main',
+    countdown: NewsCountdown
+  ): Promise<void> {
+    if (!token || !owner || !repo) return;
+    const cleanPath = 'data/news_countdown.json';
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `token ${token.trim()}`,
+      'Content-Type': 'application/json',
+    };
+
+    let currentSha: string | undefined;
+    try {
+      const getUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+      const getRes = await fetch(getUrl, { headers });
+      if (getRes.ok) {
+        const getData = await getRes.json();
+        currentSha = getData.sha;
+      }
+    } catch {
+      // ignore
+    }
+
+    const encodedContent = b64EncodeUnicode(JSON.stringify(countdown, null, 2));
+    const putUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}`;
+    const payload: Record<string, string> = {
+      message: `Mise à jour du compte à rebours Actualité (${countdown.enabled ? countdown.targetDate : 'désactivé'})`,
+      content: encodedContent,
+      branch: branch.trim() || 'main',
+    };
+    if (currentSha) payload.sha = currentSha;
+
+    const putRes = await fetch(putUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!putRes.ok) {
+      const err = await putRes.json().catch(() => ({}));
+      throw new Error(err.message || `Erreur d'écriture GitHub (HTTP ${putRes.status})`);
+    }
   },
 
   /**

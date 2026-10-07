@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { VideoItem, VideoCategory, NewsPhoto } from './types/cinema';
+import { VideoItem, VideoCategory, NewsPhoto, NewsCountdown } from './types/cinema';
 import { storageService } from './services/storageService';
 import { syncManager } from './services/syncManager';
 import { githubService } from './services/githubService';
@@ -21,8 +21,9 @@ export default function App() {
   // Video catalog state
   const [videos, setVideos] = useState<VideoItem[]>(() => storageService.getVideos());
 
-  // News ("Actualité") photos state
+  // News ("Actualité") photos & countdown state
   const [newsPhotos, setNewsPhotos] = useState<NewsPhoto[]>(() => storageService.getNewsPhotos());
+  const [newsCountdown, setNewsCountdown] = useState<NewsCountdown>(() => storageService.getNewsCountdown());
 
   // Admin authentication state (checks sessionStorage)
   const [isAdmin, setIsAdmin] = useState<boolean>(() => storageService.isAdminAuthenticated());
@@ -62,6 +63,34 @@ export default function App() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Erreur GitHub';
         console.warn('Sync photos GitHub échoué', e);
+        return { syncedToGitHub: false, error: `Échec sync GitHub : ${msg}` };
+      }
+    }
+    return {
+      syncedToGitHub: false,
+      error: 'Enregistré localement (ajoutez votre jeton GitHub dans Admin pour synchroniser sur tous les ordinateurs)',
+    };
+  }, []);
+
+  // Handler when Admin updates the Actualité event countdown
+  const handleUpdateNewsCountdown = useCallback(async (updatedCountdown: NewsCountdown) => {
+    setNewsCountdown(updatedCountdown);
+    storageService.saveNewsCountdown(updatedCountdown);
+
+    const cfg = storageService.getConfig();
+    if (cfg.githubToken && cfg.githubOwner && cfg.githubRepo) {
+      try {
+        await githubService.pushNewsCountdown(
+          cfg.githubToken,
+          cfg.githubOwner,
+          cfg.githubRepo,
+          cfg.githubBranch || 'main',
+          updatedCountdown
+        );
+        return { syncedToGitHub: true };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erreur GitHub';
+        console.warn('Sync compte à rebours GitHub échoué', e);
         return { syncedToGitHub: false, error: `Échec sync GitHub : ${msg}` };
       }
     }
@@ -114,6 +143,21 @@ export default function App() {
             }
           })
           .catch(() => {});
+
+        githubService
+          .pullNewsCountdown(
+            currentConfig.githubToken,
+            currentConfig.githubOwner,
+            currentConfig.githubRepo,
+            currentConfig.githubBranch || 'main'
+          )
+          .then(remoteCountdown => {
+            if (remoteCountdown && remoteCountdown.targetDate !== undefined) {
+              setNewsCountdown(remoteCountdown);
+              storageService.saveNewsCountdown(remoteCountdown);
+            }
+          })
+          .catch(() => {});
       }
 
       if (!hasYouTube && !hasGitHub) return;
@@ -149,11 +193,13 @@ export default function App() {
       />
 
       <main className="flex-1">
-        {/* Section 0: "Actualité" (Large uniform photo carousel with 5-second auto-scroll, editable in Admin mode) */}
+        {/* Section 0: "Actualité" (Large uniform photo carousel with 5-second auto-scroll + Visual Countdown, editable in Admin mode) */}
         <NewsCarouselSection
           photos={newsPhotos}
           isAdmin={isAdmin}
           onUpdatePhotos={handleUpdateNewsPhotos}
+          countdown={newsCountdown}
+          onUpdateCountdown={handleUpdateNewsCountdown}
         />
 
         {/* Section 1: "Nouvelle publication" (The very latest video in spotlight) */}

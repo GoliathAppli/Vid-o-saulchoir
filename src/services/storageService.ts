@@ -3,16 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, normalizeVideoCategory } from '../types/cinema';
+import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, NewsCountdown, normalizeVideoCategory } from '../types/cinema';
 import bundledVideosData from '../../data/videos.json';
 
 const STORAGE_KEYS = {
   LEGACY_VIDEOS: 'atelier_cinema_videos_catalog',
   VIDEOS: 'atelier_cinema_videos_v2',
   NEWS_PHOTOS: 'atelier_cinema_news_photos_v1',
+  NEWS_COUNTDOWN: 'atelier_cinema_news_countdown_v1',
   CONFIG: 'atelier_cinema_sync_config',
   LOGS: 'atelier_cinema_sync_logs',
   ADMIN_SESSION: 'atelier_cinema_admin_auth',
+};
+
+const DEFAULT_COUNTDOWN: NewsCountdown = {
+  enabled: false,
+  targetDate: '',
+  targetTime: '20:00',
+  displayMode: 'days',
+  label: "Avant l'événement",
 };
 
 const DEFAULT_CONFIG: SyncConfig = {
@@ -124,6 +133,32 @@ export const storageService = {
       localStorage.setItem(STORAGE_KEYS.NEWS_PHOTOS, JSON.stringify(photos));
     } catch (e) {
       console.error('Erreur sauvegarde photos actualité', e);
+    }
+  },
+
+  getNewsCountdown(): NewsCountdown {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.NEWS_COUNTDOWN);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...DEFAULT_COUNTDOWN,
+            ...parsed,
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Erreur lecture compte à rebours actualité', e);
+    }
+    return DEFAULT_COUNTDOWN;
+  },
+
+  saveNewsCountdown(countdown: NewsCountdown): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.NEWS_COUNTDOWN, JSON.stringify(countdown));
+    } catch (e) {
+      console.error('Erreur sauvegarde compte à rebours actualité', e);
     }
   },
 

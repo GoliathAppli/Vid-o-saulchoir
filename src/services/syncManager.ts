@@ -168,6 +168,18 @@ export const syncManager = {
               localPhotos
             );
           }
+
+          // Also push Actualité countdown (data/news_countdown.json) if configured
+          const localCountdown = storageService.getNewsCountdown();
+          if (localCountdown.targetDate) {
+            await githubService.pushNewsCountdown(
+              config.githubToken,
+              config.githubOwner,
+              config.githubRepo,
+              config.githubBranch || 'main',
+              localCountdown
+            );
+          }
         } catch (ghErr) {
           hasError = true;
           const errMsg = ghErr instanceof Error ? ghErr.message : 'Erreur inconnue GitHub';
