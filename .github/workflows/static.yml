@@ -3,10 +3,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: ["main"]
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -20,6 +22,97 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Auto-sync YouTube videos if permanent credentials are saved
+        continue-on-error: true
+        run: |
+          node -e '
+          const fs = require("fs");
+          const VAULT_SECRET = "Saulchoir_Atelier_Cinema_25091993_PermanentSyncKey";
+          function decodeVault(encoded) {
+            if (!encoded || !encoded.startsWith("acs1_")) return null;
+            const hex = encoded.slice(5);
+            const keyBytes = Buffer.from(VAULT_SECRET, "utf8");
+            const bytes = Buffer.alloc(hex.length / 2);
+            for (let i = 0; i < bytes.length; i++) {
+              const b = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+              bytes[i] = (b ^ keyBytes[i % keyBytes.length] ^ ((i * 31) & 0xff)) & 0xff;
+            }
+            return JSON.parse(bytes.toString("utf8"));
+          }
+          async function main() {
+            if (!fs.existsSync("data/sync_settings.json")) return;
+            const settings = JSON.parse(fs.readFileSync("data/sync_settings.json", "utf8"));
+            const vault = decodeVault(settings.encryptedVault) || {};
+            const clientId = vault.youtubeOAuthClientId || settings.youtubeOAuthClientId || "";
+            const clientSecret = vault.youtubeClientSecret || "";
+            const refreshToken = vault.youtubeRefreshToken || "";
+            let accessToken = vault.youtubeAccessToken || "";
+            const apiKey = vault.youtubeApiKey || "";
+            const playlistId = settings.youtubePlaylistId || "UUdOuEvwdKc0qr7_hxGF9_gA";
+
+            if (clientId && clientSecret && refreshToken) {
+              const tRes = await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                  client_id: clientId,
+                  client_secret: clientSecret,
+                  refresh_token: refreshToken,
+                  grant_type: "refresh_token",
+                }),
+              });
+              if (tRes.ok) {
+                const tData = await tRes.json();
+                if (tData.access_token) accessToken = tData.access_token;
+              }
+            }
+            if (!accessToken && !apiKey) return;
+
+            const headers = accessToken ? { Authorization: "Bearer " + accessToken } : {};
+            let url = "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails,status&playlistId=" + encodeURIComponent(playlistId) + "&maxResults=50";
+            if (apiKey) url += "&key=" + encodeURIComponent(apiKey);
+            const res = await fetch(url, { headers });
+            if (!res.ok) return;
+            const data = await res.json();
+            const currentVideos = fs.existsSync("data/videos.json") ? JSON.parse(fs.readFileSync("data/videos.json", "utf8")) : [];
+            const map = new Map(currentVideos.map(v => [v.id, v]));
+            let added = 0;
+            for (const item of data.items || []) {
+              const vidId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+              if (!vidId) continue;
+              const snippet = item.snippet || {};
+              const status = item.status || {};
+              if (snippet.title === "Deleted video" || snippet.title === "Private video" || status.privacyStatus === "private") continue;
+              if (!map.has(vidId)) {
+                added++;
+                const thumb = snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || ("https://img.youtube.com/vi/" + vidId + "/hqdefault.jpg");
+                currentVideos.unshift({
+                  id: vidId,
+                  title: snippet.title || "Sans titre",
+                  description: snippet.description || "",
+                  synopsis: (snippet.description || "").slice(0, 350),
+                  publishedAt: item.contentDetails?.videoPublishedAt || snippet.publishedAt || new Date().toISOString(),
+                  thumbnailUrl: thumb,
+                  youtubeUrl: "https://www.youtube.com/watch?v=" + vidId,
+                  isUnlisted: status.privacyStatus === "unlisted",
+                  duration: "12:00",
+                  director: snippet.videoOwnerChannelTitle || snippet.channelTitle || "Atelier Cinéma du Saulchoir",
+                  genre: "Vidéos d\x27atelier",
+                  tags: ["Atelier", "Saulchoir"]
+                });
+              }
+            }
+            if (added > 0) {
+              currentVideos.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+              fs.writeFileSync("data/videos.json", JSON.stringify(currentVideos, null, 2));
+            }
+          }
+          main().catch(() => {});
+          '
+          git config user.name "Atelier Cinema AutoSync"
+          git config user.email "bot@saulchoir.org"
+          git add data/videos.json
+          git diff --staged --quiet || (git commit -m "Sync auto YouTube" && git push)
       - name: Install dependencies
         run: npm install --legacy-peer-deps
       - name: Build

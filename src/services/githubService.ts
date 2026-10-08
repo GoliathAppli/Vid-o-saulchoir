@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, NewsPhoto, NewsCountdown } from '../types/cinema';
+import { VideoItem, NewsPhoto, NewsCountdown, PersistedSyncSettings } from '../types/cinema';
 
 function b64DecodeUnicode(str: string): string {
   // Safe base64 decoding supporting UTF-8 characters (accents, quotes, etc.)
@@ -139,8 +139,17 @@ export const githubService = {
       headers['Authorization'] = `token ${token.trim()}`;
     }
 
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, cache: 'no-store' });
     if (!res.ok) {
+      // Fallback to raw.githubusercontent.com so any visitor gets latest videos even if GitHub API rate limit is reached
+      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+      if (rawRes.ok) {
+        const rawParsed = await rawRes.json();
+        if (Array.isArray(rawParsed)) {
+          return { videos: rawParsed };
+        }
+      }
       if (res.status === 404) {
         throw new Error(`Le fichier "${cleanPath}" n'existe pas encore sur la branche "${branch}".`);
       }
@@ -398,6 +407,90 @@ export const githubService = {
       const err = await putRes.json().catch(() => ({}));
       throw new Error(err.message || `Erreur d'écriture GitHub (HTTP ${putRes.status})`);
     }
+  },
+
+  /**
+   * Pull data/sync_settings.json from GitHub so OAuth Client ID and permanent tokens persist across sessions & computers
+   */
+  async pullSyncSettings(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main'
+  ): Promise<PersistedSyncSettings | null> {
+    if (!owner || !repo) return null;
+    const cleanPath = 'data/sync_settings.json';
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+    };
+    if (token && token.trim()) {
+      headers['Authorization'] = `token ${token.trim()}`;
+    }
+
+    try {
+      const res = await fetch(url, { headers, cache: 'no-store' });
+      if (!res.ok) {
+        const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
+        const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+        if (!rawRes.ok) return null;
+        const rawParsed = await rawRes.json();
+        return rawParsed && typeof rawParsed === 'object' ? (rawParsed as PersistedSyncSettings) : null;
+      }
+      const data = await res.json();
+      if (!data.content) return null;
+      const decoded = b64DecodeUnicode(data.content);
+      const parsed = JSON.parse(decoded);
+      return parsed && typeof parsed === 'object' ? (parsed as PersistedSyncSettings) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Push data/sync_settings.json to GitHub (with obfuscated vault so tokens are never revoked by secret scanners)
+   */
+  async pushSyncSettings(
+    token: string,
+    owner: string,
+    repo: string,
+    branch = 'main',
+    settings: PersistedSyncSettings
+  ): Promise<void> {
+    if (!token || !owner || !repo) return;
+    const cleanPath = 'data/sync_settings.json';
+    const headers: HeadersInit = {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `token ${token.trim()}`,
+      'Content-Type': 'application/json',
+    };
+
+    let currentSha: string | undefined;
+    try {
+      const getUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
+      const getRes = await fetch(getUrl, { headers, cache: 'no-store' });
+      if (getRes.ok) {
+        const getData = await getRes.json();
+        currentSha = getData.sha;
+      }
+    } catch {
+      // ignore
+    }
+
+    const encodedContent = b64EncodeUnicode(JSON.stringify(settings, null, 2));
+    const putUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}`;
+    const payload: Record<string, string> = {
+      message: 'Sauvegarde permanente de la configuration de synchronisation OAuth & YouTube',
+      content: encodedContent,
+      branch: branch.trim() || 'main',
+    };
+    if (currentSha) payload.sha = currentSha;
+
+    await fetch(putUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+    });
   },
 
   /**

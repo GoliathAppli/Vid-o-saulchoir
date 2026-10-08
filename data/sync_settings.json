@@ -1,0 +1,12 @@
+{
+  "youtubeOAuthClientId": "",
+  "youtubeChannelId": "UCdOuEvwdKc0qr7_hxGF9_gA",
+  "youtubePlaylistId": "UUdOuEvwdKc0qr7_hxGF9_gA",
+  "githubOwner": "goliathappli",
+  "githubRepo": "Vid-o-saulchoir",
+  "githubBranch": "main",
+  "githubFilePath": "data/videos.json",
+  "autoSyncEnabled": true,
+  "autoSyncIntervalMinutes": 2,
+  "encryptedVault": ""
+}

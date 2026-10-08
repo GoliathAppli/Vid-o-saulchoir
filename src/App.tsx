@@ -118,67 +118,76 @@ export default function App() {
     setIsAdminModalOpen(true);
   };
 
-  // Auto-sync immediately on mount if API/Playlist or GitHub are configured, plus background interval
+  // Auto-sync immediately on mount, every 2 minutes, and whenever the user returns to the tab (visibilitychange / focus)
   useEffect(() => {
-    const runAutoSync = () => {
-      const currentConfig = storageService.getConfig();
-      const hasYouTube = Boolean(
-        currentConfig.youtubeAccessToken ||
-        (currentConfig.youtubeApiKey && currentConfig.youtubePlaylistId)
-      );
-      const hasGitHub = Boolean(currentConfig.githubOwner && currentConfig.githubRepo);
+    let isRunning = false;
 
-      if (hasGitHub) {
-        githubService
-          .pullNewsPhotos(
-            currentConfig.githubToken,
-            currentConfig.githubOwner,
-            currentConfig.githubRepo,
-            currentConfig.githubBranch || 'main'
-          )
-          .then(remotePhotos => {
-            if (remotePhotos && remotePhotos.length > 0) {
-              setNewsPhotos(remotePhotos);
-              storageService.saveNewsPhotos(remotePhotos);
-            }
-          })
-          .catch(() => {});
+    const runAutoSync = async () => {
+      if (isRunning) return;
+      isRunning = true;
+      try {
+        const currentConfig = storageService.getConfig();
+        const owner = currentConfig.githubOwner || 'goliathappli';
+        const repo = currentConfig.githubRepo || 'Vid-o-saulchoir';
+        const branch = currentConfig.githubBranch || 'main';
 
-        githubService
-          .pullNewsCountdown(
-            currentConfig.githubToken,
-            currentConfig.githubOwner,
-            currentConfig.githubRepo,
-            currentConfig.githubBranch || 'main'
-          )
-          .then(remoteCountdown => {
-            if (remoteCountdown && remoteCountdown.targetDate !== undefined) {
-              setNewsCountdown(remoteCountdown);
-              storageService.saveNewsCountdown(remoteCountdown);
-            }
-          })
-          .catch(() => {});
-      }
+        if (owner && repo) {
+          githubService
+            .pullNewsPhotos(currentConfig.githubToken, owner, repo, branch)
+            .then(remotePhotos => {
+              if (remotePhotos && remotePhotos.length > 0) {
+                setNewsPhotos(remotePhotos);
+                storageService.saveNewsPhotos(remotePhotos);
+              }
+            })
+            .catch(() => {});
 
-      if (!hasYouTube && !hasGitHub) return;
+          githubService
+            .pullNewsCountdown(currentConfig.githubToken, owner, repo, branch)
+            .then(remoteCountdown => {
+              if (remoteCountdown && remoteCountdown.targetDate !== undefined) {
+                setNewsCountdown(remoteCountdown);
+                storageService.saveNewsCountdown(remoteCountdown);
+              }
+            })
+            .catch(() => {});
+        }
 
-      syncManager.runFullSync(currentConfig).then(res => {
+        const res = await syncManager.runFullSync(currentConfig);
         if (res.videos) {
           setVideos(res.videos);
         }
-      });
+      } finally {
+        isRunning = false;
+      }
     };
 
     // Run once immediately on load
     runAutoSync();
 
+    // Also run 3 seconds after load once Google Identity script is ready for silent OAuth token refresh
+    const bootTimer = setTimeout(runAutoSync, 3000);
+
+    // Run every 2 minutes in background
     const config = storageService.getConfig();
-    if (!config.autoSyncEnabled) return;
+    const intervalMinutes = Math.max(1, Math.min(5, config.autoSyncIntervalMinutes || 2));
+    const timer = setInterval(runAutoSync, intervalMinutes * 60 * 1000);
 
-    const intervalMs = Math.max(5, config.autoSyncIntervalMinutes || 15) * 60 * 1000;
-    const timer = setInterval(runAutoSync, intervalMs);
+    // Run immediately when user comes back from YouTube tab to the site
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        runAutoSync();
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(bootTimer);
+      clearInterval(timer);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
   }, []);
 
   return (

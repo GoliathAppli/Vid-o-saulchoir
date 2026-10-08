@@ -11,33 +11,57 @@ import { githubService } from './githubService';
 export const syncManager = {
   /**
    * Run complete sync:
-   * 1. Pull YouTube videos (if configured)
-   * 2. Merge with existing catalog
-   * 3. Push to GitHub (if configured)
-   * 4. Save locally
+   * 0. Restore remote sync_settings.json from GitHub if present so OAuth Client ID & tokens are permanent
+   * 1. Pull GitHub catalog (data/videos.json)
+   * 2. Ensure valid/refreshed YouTube OAuth token & pull YouTube videos (including unlisted & Shorts)
+   * 3. Merge with existing catalog
+   * 4. Save locally & push updates + permanent sync_settings to GitHub
    */
-  async runFullSync(config: SyncConfig): Promise<{
+  async runFullSync(
+    initialConfig: SyncConfig,
+    options?: { forceGitHubPush?: boolean }
+  ): Promise<{
     success: boolean;
     message: string;
     videos: VideoItem[];
     newCount: number;
+    config?: SyncConfig;
   }> {
+    let config = { ...initialConfig };
     let currentVideos = storageService.getVideos();
     let newItemsCount = 0;
     let hasError = false;
+    let tokenWasRefreshed = false;
     const actionsTaken: string[] = [];
 
-    const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId || '');
-
     try {
-      // 0. If GitHub repo is configured, pull the shared catalog from GitHub so any computer stays in sync
-      if (config.githubOwner && config.githubRepo) {
+      // 0a. Pull remote sync_settings.json so OAuth Client ID & tokens are never lost
+      const owner = config.githubOwner || 'goliathappli';
+      const repo = config.githubRepo || 'Vid-o-saulchoir';
+      const branch = config.githubBranch || 'main';
+
+      if (owner && repo) {
+        try {
+          const remoteSettings = await githubService.pullSyncSettings(
+            config.githubToken,
+            owner,
+            repo,
+            branch
+          );
+          if (remoteSettings) {
+            config = storageService.mergeRemoteSyncSettings(remoteSettings);
+          }
+        } catch {
+          // ignore
+        }
+
+        // 0b. Pull shared video catalog from GitHub so any device/visitor stays in sync
         try {
           const ghPull = await githubService.pullVideos(
             config.githubToken,
-            config.githubOwner,
-            config.githubRepo,
-            config.githubBranch || 'main',
+            owner,
+            repo,
+            branch,
             config.githubFilePath || 'data/videos.json'
           );
           if (ghPull.videos && ghPull.videos.length > 0) {
@@ -66,18 +90,75 @@ export const syncManager = {
         }
       }
 
-      // 1. YouTube Sync (via OAuth 2.0 Access Token and/or Playlist ID + API Key)
+      const cleanPlaylistId =
+        extractPlaylistId(config.youtubePlaylistId || '') || 'UUdOuEvwdKc0qr7_hxGF9_gA';
+
+      // 1. Automatically ensure a fresh YouTube OAuth token (via permanent Refresh Token or silent Google OAuth)
+      if (
+        config.youtubeOAuthClientId ||
+        config.youtubeRefreshToken ||
+        config.youtubeAccessToken
+      ) {
+        try {
+          const tokenCheck = await youtubeService.ensureValidAccessToken(config);
+          if (tokenCheck.accessToken) {
+            config = {
+              ...config,
+              youtubeAccessToken: tokenCheck.accessToken,
+              youtubeTokenExpiry: tokenCheck.tokenExpiry || config.youtubeTokenExpiry,
+            };
+            if (tokenCheck.refreshed) {
+              tokenWasRefreshed = true;
+              storageService.saveConfig(config);
+            }
+          }
+        } catch {
+          // non-blocking
+        }
+      }
+
+      // 2. YouTube Sync (via OAuth 2.0 Access Token and/or Playlist ID + API Key)
       const canSyncYouTube = Boolean(
         config.youtubeAccessToken || (config.youtubeApiKey && cleanPlaylistId)
       );
 
       if (canSyncYouTube) {
         try {
-          const ytVideos = await youtubeService.fetchPlaylistVideos(
-            cleanPlaylistId,
-            config.youtubeApiKey,
-            config.youtubeAccessToken
-          );
+          let ytVideos: VideoItem[] = [];
+          try {
+            ytVideos = await youtubeService.fetchPlaylistVideos(
+              cleanPlaylistId,
+              config.youtubeApiKey,
+              config.youtubeAccessToken
+            );
+          } catch (firstErr) {
+            // If access token expired mid-session, force a silent/refresh-token renewal and retry once
+            if (config.youtubeOAuthClientId || config.youtubeRefreshToken) {
+              const retryToken = await youtubeService.ensureValidAccessToken({
+                ...config,
+                youtubeAccessToken: '',
+                youtubeTokenExpiry: 0,
+              });
+              if (retryToken.accessToken) {
+                config = {
+                  ...config,
+                  youtubeAccessToken: retryToken.accessToken,
+                  youtubeTokenExpiry: retryToken.tokenExpiry,
+                };
+                tokenWasRefreshed = true;
+                storageService.saveConfig(config);
+                ytVideos = await youtubeService.fetchPlaylistVideos(
+                  cleanPlaylistId,
+                  config.youtubeApiKey,
+                  config.youtubeAccessToken
+                );
+              } else {
+                throw firstErr;
+              }
+            } else {
+              throw firstErr;
+            }
+          }
 
           const existingMap = new Map<string, VideoItem>();
           for (const v of currentVideos) {
@@ -103,7 +184,9 @@ export const syncManager = {
             }
           }
 
-          actionsTaken.push(`${ytVideos.length} vidéo(s) synchronisée(s) depuis la playlist YouTube (${newItemsCount} nouvelle(s))`);
+          actionsTaken.push(
+            `${ytVideos.length} vidéo(s) synchronisée(s) depuis YouTube (${newItemsCount} nouvelle(s))`
+          );
           storageService.addLog({
             source: 'youtube',
             status: 'success',
@@ -111,18 +194,20 @@ export const syncManager = {
             itemCount: ytVideos.length,
           });
         } catch (ytErr) {
-          hasError = true;
           const errMsg = ytErr instanceof Error ? ytErr.message : 'Erreur inconnue YouTube';
+          // Only mark as hard error if we didn't even load videos from GitHub
+          if (currentVideos.length === 0) {
+            hasError = true;
+          }
           storageService.addLog({
             source: 'youtube',
-            status: 'error',
-            message: `Erreur YouTube : ${errMsg}`,
+            status: 'warning',
+            message: `Note YouTube : ${errMsg}`,
           });
-          actionsTaken.push(`Échec YouTube : ${errMsg}`);
         }
       }
 
-      // 2. Sort current videos by publication date descending
+      // 3. Sort current videos by publication date descending
       currentVideos = [...currentVideos].sort(
         (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );
@@ -130,58 +215,80 @@ export const syncManager = {
       // Save locally
       storageService.saveVideos(currentVideos);
 
-      // 3. GitHub Sync (push latest state to repo)
-      if (config.githubToken && config.githubOwner && config.githubRepo && currentVideos.length > 0) {
-        try {
-          const commitMsg = newItemsCount > 0
-            ? `Sync auto : ${newItemsCount} nouvelle(s) vidéo(s) ajoutée(s) (${new Date().toLocaleDateString('fr-FR')})`
-            : `Sync auto : actualisation du catalogue (${new Date().toLocaleDateString('fr-FR')})`;
+      // 4. GitHub Sync (push latest videos & permanent sync_settings to repo when changes occur or forced)
+      const shouldPushGitHub = Boolean(
+        config.githubToken &&
+          owner &&
+          repo &&
+          currentVideos.length > 0 &&
+          (newItemsCount > 0 || tokenWasRefreshed || options?.forceGitHubPush)
+      );
 
-          const ghRes = await githubService.pushVideos(
+      if (shouldPushGitHub) {
+        try {
+          if (newItemsCount > 0 || options?.forceGitHubPush) {
+            const commitMsg =
+              newItemsCount > 0
+                ? `Sync auto : ${newItemsCount} nouvelle(s) vidéo(s) ajoutée(s) (${new Date().toLocaleDateString('fr-FR')})`
+                : `Sync auto : actualisation du catalogue (${new Date().toLocaleDateString('fr-FR')})`;
+
+            const ghRes = await githubService.pushVideos(
+              config.githubToken,
+              owner,
+              repo,
+              branch,
+              config.githubFilePath || 'data/videos.json',
+              currentVideos,
+              commitMsg
+            );
+
+            if (ghRes.success) {
+              actionsTaken.push(`Sauvegardé sur GitHub (${owner}/${repo})`);
+              storageService.addLog({
+                source: 'github',
+                status: 'success',
+                message: `Catalogue poussé avec succès sur GitHub (${currentVideos.length} vidéos archivées).`,
+                itemCount: currentVideos.length,
+              });
+            }
+          }
+
+          // Persist encrypted sync_settings.json so OAuth Client ID & tokens stay permanent across sessions
+          const encodedSettings = storageService.encodeSyncSettings(config);
+          await githubService.pushSyncSettings(
             config.githubToken,
-            config.githubOwner,
-            config.githubRepo,
-            config.githubBranch || 'main',
-            config.githubFilePath || 'data/videos.json',
-            currentVideos,
-            commitMsg
+            owner,
+            repo,
+            branch,
+            encodedSettings
           );
 
-          if (ghRes.success) {
-            actionsTaken.push(`Sauvegardé sur GitHub (${config.githubOwner}/${config.githubRepo})`);
-            storageService.addLog({
-              source: 'github',
-              status: 'success',
-              message: `Catalogue poussé avec succès sur GitHub (${currentVideos.length} vidéos archivées).`,
-              itemCount: currentVideos.length,
-            });
-          }
+          if (options?.forceGitHubPush) {
+            // Also push Actualité photos (data/news_photos.json) if any exist locally
+            const localPhotos = storageService.getNewsPhotos();
+            if (localPhotos.length > 0) {
+              await githubService.pushNewsPhotos(
+                config.githubToken,
+                owner,
+                repo,
+                branch,
+                localPhotos
+              );
+            }
 
-          // Also push Actualité photos (data/news_photos.json) if any exist locally
-          const localPhotos = storageService.getNewsPhotos();
-          if (localPhotos.length > 0) {
-            await githubService.pushNewsPhotos(
-              config.githubToken,
-              config.githubOwner,
-              config.githubRepo,
-              config.githubBranch || 'main',
-              localPhotos
-            );
-          }
-
-          // Also push Actualité countdown (data/news_countdown.json) if configured
-          const localCountdown = storageService.getNewsCountdown();
-          if (localCountdown.targetDate) {
-            await githubService.pushNewsCountdown(
-              config.githubToken,
-              config.githubOwner,
-              config.githubRepo,
-              config.githubBranch || 'main',
-              localCountdown
-            );
+            // Also push Actualité countdown (data/news_countdown.json) if configured
+            const localCountdown = storageService.getNewsCountdown();
+            if (localCountdown.targetDate) {
+              await githubService.pushNewsCountdown(
+                config.githubToken,
+                owner,
+                repo,
+                branch,
+                localCountdown
+              );
+            }
           }
         } catch (ghErr) {
-          hasError = true;
           const errMsg = ghErr instanceof Error ? ghErr.message : 'Erreur inconnue GitHub';
           storageService.addLog({
             source: 'github',
@@ -192,9 +299,10 @@ export const syncManager = {
         }
       }
 
-      const summary = actionsTaken.length > 0
-        ? actionsTaken.join(' · ')
-        : 'Veuillez connecter votre ID Client OAuth 2.0 YouTube (ou le dépôt GitHub) pour synchroniser.';
+      const summary =
+        actionsTaken.length > 0
+          ? actionsTaken.join(' · ')
+          : 'Synchronisation active.';
 
       const updatedConfig: SyncConfig = {
         ...config,
@@ -210,6 +318,7 @@ export const syncManager = {
         message: summary,
         videos: currentVideos,
         newCount: newItemsCount,
+        config: updatedConfig,
       };
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -232,6 +341,7 @@ export const syncManager = {
         message: errMsg,
         videos: currentVideos,
         newCount: 0,
+        config: updatedConfig,
       };
     }
   },

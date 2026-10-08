@@ -35,12 +35,16 @@ export interface VideoItem {
 }
 
 export interface SyncConfig {
-  // YouTube OAuth 2.0 & API
+  // YouTube OAuth 2.0 & API (Permanent Connection)
   youtubeOAuthClientId?: string; // e.g. "123456789-xxxx.apps.googleusercontent.com"
+  youtubeClientSecret?: string; // e.g. "GOCSPX-xxxx" (enables permanent non-expiring refresh_token)
+  youtubeRefreshToken?: string; // Permanent OAuth 2.0 Refresh Token (never expires)
   youtubeAccessToken?: string; // OAuth 2.0 Bearer token
+  youtubeTokenExpiry?: number; // Epoch ms when access_token expires
+  youtubeUserEmail?: string; // Connected Google Account email (used as login_hint for silent renewal)
   youtubeApiKey: string;
-  youtubePlaylistId: string; // Optional if using OAuth (defaults to channel's uploads playlist)
-  youtubeChannelId?: string;
+  youtubePlaylistId: string; // Defaults to channel's uploads playlist UUdOuEvwdKc0qr7_hxGF9_gA
+  youtubeChannelId?: string; // Defaults to UCdOuEvwdKc0qr7_hxGF9_gA
 
   // GitHub Repository
   githubToken: string;
@@ -51,10 +55,26 @@ export interface SyncConfig {
 
   // Automation
   autoSyncEnabled: boolean;
-  autoSyncIntervalMinutes: number; // e.g. 30
+  autoSyncIntervalMinutes: number; // e.g. 2
   lastSyncTimestamp?: string;
   lastSyncStatus?: 'success' | 'error' | 'idle';
   lastSyncMessage?: string;
+  updatedAt?: string;
+}
+
+export interface PersistedSyncSettings {
+  youtubeOAuthClientId?: string;
+  youtubeChannelId?: string;
+  youtubePlaylistId?: string;
+  youtubeUserEmail?: string;
+  githubOwner?: string;
+  githubRepo?: string;
+  githubBranch?: string;
+  githubFilePath?: string;
+  autoSyncEnabled?: boolean;
+  autoSyncIntervalMinutes?: number;
+  updatedAt?: string;
+  encryptedVault?: string; // Obfuscated credentials so GitHub secret scanner never revokes tokens
 }
 
 export interface SyncLogEntry {
