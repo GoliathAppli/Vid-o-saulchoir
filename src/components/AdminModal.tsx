@@ -951,7 +951,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                     {/* Step-by-step guide: How to connect OAuth 2.0 for ALL Unlisted Videos WITHOUT the other phone */}
                     <div className="p-4 rounded-lg bg-amber-950/20 border border-amber-500/30 text-xs text-zinc-200 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      {/* Direct fix for Erreur 403 : access_denied */}
+                      <div className="p-3 rounded-lg bg-red-950/40 border border-red-500/40 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold text-red-300 flex items-center gap-1.5 text-xs">
+                            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                            <span>Vous voyez « Erreur 403 : access_denied (n'a pas terminé la procédure de validation) » ?</span>
+                          </div>
+                          <a
+                            href="https://console.cloud.google.com/apis/credentials/consent"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 rounded text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Ouvrir Écran d'autorisation OAuth (Audience)</span>
+                          </a>
+                        </div>
+                        <div className="text-[11px] text-zinc-200 leading-relaxed space-y-1">
+                          <p>
+                            C'est tout à fait normal lors de la création d'un ID OAuth : par défaut, Google bloque l'application tant qu'elle est en mode <strong>« Test »</strong> sans testeur autorisé. Pour débloquer définitivement l'accès en 10 secondes sur Google Cloud (menu <strong>Écran d'autorisation OAuth</strong> ou <strong>Google Auth Platform → Audience</strong>) :
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                            <li>
+                              <strong>Action 1 (Recommandée & Permanente) :</strong> Sous <em>État de publication (Testing)</em>, cliquez sur le bouton <strong>« PUBLIER L'APPLICATION » (Publish App)</strong> puis confirmez. <em>(Cela supprime le blocage 403 pour tous vos comptes ET empêche le jeton d'expirer au bout de 7 jours !)</em>
+                            </li>
+                            <li>
+                              <strong>OU Action 2 (Mode Test) :</strong> Dans la rubrique <strong>« Utilisateurs de test » (Test users)</strong>, cliquez sur <strong>« + ADD USERS »</strong> et ajoutez <code className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-amber-300 font-mono select-all">fabien.piazza@hotmail.fr</code> (ainsi que l'adresse email de la chaîne YouTube).
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <div className="font-semibold text-amber-300 flex items-center gap-1.5 text-sm">
                           <Sparkles className="w-4 h-4 shrink-0" />
                           <span>Comment synchroniser 100% des vidéos NON RÉPERTORIÉES en OAuth 2.0 SANS l'autre téléphone ?</span>
