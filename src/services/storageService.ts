@@ -306,21 +306,20 @@ export const storageService = {
       const merged: SyncConfig = {
         ...existing,
         ...config,
-        // Never accidentally wipe out saved OAuth Client ID or tokens with empty strings unless explicitly cleared
         youtubeOAuthClientId:
-          config.youtubeOAuthClientId !== undefined && config.youtubeOAuthClientId !== ''
+          config.youtubeOAuthClientId !== undefined
             ? config.youtubeOAuthClientId.trim()
             : existing.youtubeOAuthClientId || '',
         youtubeClientSecret:
-          config.youtubeClientSecret !== undefined && config.youtubeClientSecret !== ''
+          config.youtubeClientSecret !== undefined
             ? config.youtubeClientSecret.trim()
             : existing.youtubeClientSecret || '',
         youtubeRefreshToken:
-          config.youtubeRefreshToken !== undefined && config.youtubeRefreshToken !== ''
+          config.youtubeRefreshToken !== undefined
             ? config.youtubeRefreshToken.trim()
             : existing.youtubeRefreshToken || '',
         youtubeAccessToken:
-          config.youtubeAccessToken !== undefined && config.youtubeAccessToken !== ''
+          config.youtubeAccessToken !== undefined
             ? config.youtubeAccessToken.trim()
             : existing.youtubeAccessToken || '',
         youtubeTokenExpiry:
@@ -328,9 +327,13 @@ export const storageService = {
             ? config.youtubeTokenExpiry
             : existing.youtubeTokenExpiry,
         youtubeUserEmail:
-          config.youtubeUserEmail !== undefined && config.youtubeUserEmail !== ''
+          config.youtubeUserEmail !== undefined
             ? config.youtubeUserEmail.trim()
             : existing.youtubeUserEmail || '',
+        youtubeApiKey:
+          config.youtubeApiKey !== undefined
+            ? config.youtubeApiKey.trim()
+            : existing.youtubeApiKey || '',
         githubToken:
           config.githubToken !== undefined && config.githubToken !== ''
             ? config.githubToken.trim()
@@ -342,10 +345,29 @@ export const storageService = {
         githubOwner: config.githubOwner || existing.githubOwner || DEFAULT_CONFIG.githubOwner,
         githubRepo: config.githubRepo || existing.githubRepo || DEFAULT_CONFIG.githubRepo,
       };
+      if (merged.youtubeOAuthClientId) {
+        localStorage.removeItem('atelier_cinema_oauth_cleared');
+      }
       localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(merged));
     } catch (e) {
       console.error('Erreur sauvegarde config', e);
     }
+  },
+
+  clearOAuthCredentials(): SyncConfig {
+    const existing = this.getConfig();
+    const cleaned: SyncConfig = {
+      ...existing,
+      youtubeOAuthClientId: '',
+      youtubeClientSecret: '',
+      youtubeRefreshToken: '',
+      youtubeAccessToken: '',
+      youtubeTokenExpiry: undefined,
+      youtubeUserEmail: '',
+    };
+    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cleaned));
+    localStorage.setItem('atelier_cinema_oauth_cleared', 'true');
+    return cleaned;
   },
 
   encodeSyncSettings(config: SyncConfig): PersistedSyncSettings {
@@ -380,12 +402,14 @@ export const storageService = {
     const local = this.getConfig();
     if (!remote) return local;
 
+    const oauthCleared = localStorage.getItem('atelier_cinema_oauth_cleared') === 'true';
     const vault = decodeVault(remote.encryptedVault) || {};
 
-    // Prefer whichever access token expires later
-    let bestAccessToken = local.youtubeAccessToken || vault.youtubeAccessToken || '';
-    let bestTokenExpiry = local.youtubeTokenExpiry || vault.youtubeTokenExpiry;
+    // Prefer whichever access token expires later (unless OAuth was explicitly cleared)
+    let bestAccessToken = oauthCleared ? '' : (local.youtubeAccessToken || vault.youtubeAccessToken || '');
+    let bestTokenExpiry = oauthCleared ? undefined : (local.youtubeTokenExpiry || vault.youtubeTokenExpiry);
     if (
+      !oauthCleared &&
       vault.youtubeAccessToken &&
       vault.youtubeTokenExpiry &&
       (!local.youtubeTokenExpiry || vault.youtubeTokenExpiry > local.youtubeTokenExpiry)
@@ -396,22 +420,26 @@ export const storageService = {
 
     const merged: SyncConfig = {
       ...local,
-      youtubeOAuthClientId:
-        local.youtubeOAuthClientId ||
-        vault.youtubeOAuthClientId ||
-        remote.youtubeOAuthClientId ||
-        '',
-      youtubeClientSecret:
-        local.youtubeClientSecret || vault.youtubeClientSecret || '',
-      youtubeRefreshToken:
-        local.youtubeRefreshToken || vault.youtubeRefreshToken || '',
+      youtubeOAuthClientId: oauthCleared
+        ? (local.youtubeOAuthClientId || '')
+        : (local.youtubeOAuthClientId ||
+            vault.youtubeOAuthClientId ||
+            remote.youtubeOAuthClientId ||
+            ''),
+      youtubeClientSecret: oauthCleared
+        ? (local.youtubeClientSecret || '')
+        : (local.youtubeClientSecret || vault.youtubeClientSecret || ''),
+      youtubeRefreshToken: oauthCleared
+        ? (local.youtubeRefreshToken || '')
+        : (local.youtubeRefreshToken || vault.youtubeRefreshToken || ''),
       youtubeAccessToken: bestAccessToken,
       youtubeTokenExpiry: bestTokenExpiry,
-      youtubeUserEmail:
-        local.youtubeUserEmail ||
-        vault.youtubeUserEmail ||
-        remote.youtubeUserEmail ||
-        '',
+      youtubeUserEmail: oauthCleared
+        ? (local.youtubeUserEmail || '')
+        : (local.youtubeUserEmail ||
+            vault.youtubeUserEmail ||
+            remote.youtubeUserEmail ||
+            ''),
       youtubeApiKey: local.youtubeApiKey || vault.youtubeApiKey || '',
       youtubePlaylistId:
         local.youtubePlaylistId ||

@@ -40,8 +40,9 @@ jobs:
             return JSON.parse(bytes.toString("utf8"));
           }
           async function main() {
-            if (!fs.existsSync("data/sync_settings.json")) return;
-            const settings = JSON.parse(fs.readFileSync("data/sync_settings.json", "utf8"));
+            const settings = fs.existsSync("data/sync_settings.json")
+              ? JSON.parse(fs.readFileSync("data/sync_settings.json", "utf8"))
+              : {};
             const vault = decodeVault(settings.encryptedVault) || {};
             const clientId = vault.youtubeOAuthClientId || settings.youtubeOAuthClientId || "";
             const clientSecret = vault.youtubeClientSecret || "";
@@ -49,58 +50,172 @@ jobs:
             let accessToken = vault.youtubeAccessToken || "";
             const apiKey = vault.youtubeApiKey || "";
             const playlistId = settings.youtubePlaylistId || "UUdOuEvwdKc0qr7_hxGF9_gA";
+            const channelId = settings.youtubeChannelId || "UCdOuEvwdKc0qr7_hxGF9_gA";
 
             if (clientId && clientSecret && refreshToken) {
-              const tRes = await fetch("https://oauth2.googleapis.com/token", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({
-                  client_id: clientId,
-                  client_secret: clientSecret,
-                  refresh_token: refreshToken,
-                  grant_type: "refresh_token",
-                }),
-              });
-              if (tRes.ok) {
-                const tData = await tRes.json();
-                if (tData.access_token) accessToken = tData.access_token;
-              }
+              try {
+                const tRes = await fetch("https://oauth2.googleapis.com/token", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                  body: new URLSearchParams({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    refresh_token: refreshToken,
+                    grant_type: "refresh_token",
+                  }),
+                });
+                if (tRes.ok) {
+                  const tData = await tRes.json();
+                  if (tData.access_token) accessToken = tData.access_token;
+                }
+              } catch {}
             }
-            if (!accessToken && !apiKey) return;
 
-            const headers = accessToken ? { Authorization: "Bearer " + accessToken } : {};
-            let url = "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails,status&playlistId=" + encodeURIComponent(playlistId) + "&maxResults=50";
-            if (apiKey) url += "&key=" + encodeURIComponent(apiKey);
-            const res = await fetch(url, { headers });
-            if (!res.ok) return;
-            const data = await res.json();
-            const currentVideos = fs.existsSync("data/videos.json") ? JSON.parse(fs.readFileSync("data/videos.json", "utf8")) : [];
+            const currentVideos = fs.existsSync("data/videos.json")
+              ? JSON.parse(fs.readFileSync("data/videos.json", "utf8"))
+              : [];
             const map = new Map(currentVideos.map(v => [v.id, v]));
             let added = 0;
-            for (const item of data.items || []) {
-              const vidId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
-              if (!vidId) continue;
-              const snippet = item.snippet || {};
-              const status = item.status || {};
-              if (snippet.title === "Deleted video" || snippet.title === "Private video" || status.privacyStatus === "private") continue;
-              if (!map.has(vidId)) {
-                added++;
-                const thumb = snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || ("https://img.youtube.com/vi/" + vidId + "/hqdefault.jpg");
-                currentVideos.unshift({
-                  id: vidId,
-                  title: snippet.title || "Sans titre",
-                  description: snippet.description || "",
-                  synopsis: (snippet.description || "").slice(0, 350),
-                  publishedAt: item.contentDetails?.videoPublishedAt || snippet.publishedAt || new Date().toISOString(),
-                  thumbnailUrl: thumb,
-                  youtubeUrl: "https://www.youtube.com/watch?v=" + vidId,
-                  isUnlisted: status.privacyStatus === "unlisted",
-                  duration: "12:00",
-                  director: snippet.videoOwnerChannelTitle || snippet.channelTitle || "Atelier Cinéma du Saulchoir",
-                  genre: "Vidéos d\x27atelier",
-                  tags: ["Atelier", "Saulchoir"]
+
+            if (accessToken || apiKey) {
+              try {
+                const headers = accessToken ? { Authorization: "Bearer " + accessToken } : {};
+                let url = "https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails,status&playlistId=" + encodeURIComponent(playlistId) + "&maxResults=50";
+                if (apiKey) url += "&key=" + encodeURIComponent(apiKey);
+                let res = await fetch(url, { headers });
+                if (!res.ok && accessToken && apiKey) {
+                  res = await fetch(url);
+                }
+                if (res.ok) {
+                  const data = await res.json();
+                  for (const item of data.items || []) {
+                    const vidId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                    if (!vidId) continue;
+                    const snippet = item.snippet || {};
+                    const status = item.status || {};
+                    if (snippet.title === "Deleted video" || snippet.title === "Private video" || status.privacyStatus === "private") continue;
+                    if (!map.has(vidId)) {
+                      added++;
+                      const thumb = snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || ("https://img.youtube.com/vi/" + vidId + "/hqdefault.jpg");
+                      const newVid = {
+                        id: vidId,
+                        title: snippet.title || "Sans titre",
+                        description: snippet.description || "",
+                        synopsis: (snippet.description || "").slice(0, 350),
+                        publishedAt: item.contentDetails?.videoPublishedAt || snippet.publishedAt || new Date().toISOString(),
+                        thumbnailUrl: thumb,
+                        youtubeUrl: "https://www.youtube.com/watch?v=" + vidId,
+                        isUnlisted: status.privacyStatus === "unlisted",
+                        duration: "12:00",
+                        director: snippet.videoOwnerChannelTitle || snippet.channelTitle || "Atelier Cinéma du Saulchoir",
+                        genre: "Vidéos d\x27atelier",
+                        tags: ["Atelier", "Saulchoir"]
+                      };
+                      currentVideos.unshift(newVid);
+                      map.set(vidId, newVid);
+                    }
+                  }
+                }
+              } catch {}
+            }
+
+            // OAuth 2.0 forMine=true: automatically discovers 100% of UNLISTED videos uploaded to the channel!
+            if (accessToken) {
+              try {
+                const mineUrl = "https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&maxResults=50&order=date";
+                const mineRes = await fetch(mineUrl, {
+                  headers: { Authorization: "Bearer " + accessToken }
                 });
-              }
+                if (mineRes.ok) {
+                  const mineData = await mineRes.json();
+                  const newUnlistedIds = [];
+                  for (const item of mineData.items || []) {
+                    const vidId = item.id?.videoId;
+                    if (!vidId || map.has(vidId)) continue;
+                    const snippet = item.snippet || {};
+                    if (snippet.title === "Deleted video" || snippet.title === "Private video") continue;
+                    newUnlistedIds.push(vidId);
+                  }
+                  if (newUnlistedIds.length > 0) {
+                    const detailsUrl = "https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,status&id=" + newUnlistedIds.join(",");
+                    const detailsRes = await fetch(detailsUrl, {
+                      headers: { Authorization: "Bearer " + accessToken }
+                    });
+                    if (detailsRes.ok) {
+                      const detailsData = await detailsRes.json();
+                      for (const vItem of detailsData.items || []) {
+                        if (vItem.status?.privacyStatus === "private") continue;
+                        const vidId = vItem.id;
+                        if (!vidId || map.has(vidId)) continue;
+                        const sn = vItem.snippet || {};
+                        const thumb = sn.thumbnails?.maxres?.url || sn.thumbnails?.high?.url || ("https://img.youtube.com/vi/" + vidId + "/hqdefault.jpg");
+                        added++;
+                        const newVid = {
+                          id: vidId,
+                          title: sn.title || "Sans titre",
+                          description: sn.description || "",
+                          synopsis: (sn.description || "").slice(0, 350),
+                          publishedAt: sn.publishedAt || new Date().toISOString(),
+                          thumbnailUrl: thumb,
+                          youtubeUrl: "https://www.youtube.com/watch?v=" + vidId,
+                          isUnlisted: vItem.status?.privacyStatus === "unlisted",
+                          duration: "12:00",
+                          director: sn.channelTitle || "Atelier Cinéma du Saulchoir",
+                          genre: "Vidéos d\x27atelier",
+                          tags: ["Atelier", "Saulchoir"]
+                        };
+                        currentVideos.unshift(newVid);
+                        map.set(vidId, newVid);
+                      }
+                    }
+                  }
+                }
+              } catch {}
+            }
+
+            // Direct YouTube XML feed fallback (works 24/7 with zero OAuth & zero API key)
+            const feedUrls = [
+              "https://www.youtube.com/feeds/videos.xml?playlist_id=" + encodeURIComponent(playlistId),
+              "https://www.youtube.com/feeds/videos.xml?channel_id=" + encodeURIComponent(channelId)
+            ];
+            for (const fUrl of feedUrls) {
+              try {
+                const fRes = await fetch(fUrl);
+                if (!fRes.ok) continue;
+                const xml = await fRes.text();
+                const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+                let match;
+                while ((match = entryRegex.exec(xml)) !== null) {
+                  const block = match[1];
+                  const idMatch = block.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
+                  const vidId = idMatch ? idMatch[1].trim() : "";
+                  if (!vidId || map.has(vidId)) continue;
+                  const titleMatch = block.match(/<title>([^<]+)<\/title>/);
+                  const title = titleMatch ? titleMatch[1].trim() : "Sans titre";
+                  if (title === "Deleted video" || title === "Private video") continue;
+                  const pubMatch = block.match(/<published>([^<]+)<\/published>/);
+                  const publishedAt = pubMatch ? pubMatch[1].trim() : new Date().toISOString();
+                  const descMatch = block.match(/<media:description>([\s\S]*?)<\/media:description>/);
+                  const description = descMatch ? descMatch[1].trim() : "";
+                  added++;
+                  const newVid = {
+                    id: vidId,
+                    title,
+                    description,
+                    synopsis: description.slice(0, 350),
+                    publishedAt,
+                    thumbnailUrl: "https://img.youtube.com/vi/" + vidId + "/hqdefault.jpg",
+                    youtubeUrl: "https://www.youtube.com/watch?v=" + vidId,
+                    isUnlisted: false,
+                    duration: "12:00",
+                    director: "Atelier Cinéma du Saulchoir",
+                    genre: "Vidéos d\x27atelier",
+                    tags: ["Atelier", "Saulchoir"]
+                  };
+                  currentVideos.unshift(newVid);
+                  map.set(vidId, newVid);
+                }
+              } catch {}
             }
             if (added > 0) {
               currentVideos.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());

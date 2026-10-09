@@ -92,12 +92,19 @@ export const syncManager = {
 
       const cleanPlaylistId =
         extractPlaylistId(config.youtubePlaylistId || '') || 'UUdOuEvwdKc0qr7_hxGF9_gA';
+      const cleanChannelId =
+        (config.youtubeChannelId || 'UCdOuEvwdKc0qr7_hxGF9_gA').trim();
 
-      // 1. Automatically ensure a fresh YouTube OAuth token (via permanent Refresh Token or silent Google OAuth)
+      // 1. Automatically ensure a fresh YouTube OAuth token ONLY if OAuth credentials are actively configured
+      const oauthCleared =
+        typeof localStorage !== 'undefined' &&
+        localStorage.getItem('atelier_cinema_oauth_cleared') === 'true';
+
       if (
-        config.youtubeOAuthClientId ||
-        config.youtubeRefreshToken ||
-        config.youtubeAccessToken
+        !oauthCleared &&
+        (config.youtubeOAuthClientId ||
+          config.youtubeRefreshToken ||
+          config.youtubeAccessToken)
       ) {
         try {
           const tokenCheck = await youtubeService.ensureValidAccessToken(config);
@@ -117,9 +124,12 @@ export const syncManager = {
         }
       }
 
-      // 2. YouTube Sync (via OAuth 2.0 Access Token and/or Playlist ID + API Key)
+      // 2. YouTube Sync (works via Clé API Permanente, OAuth 2.0, OR Flux Direct Sans Téléphone !)
       const canSyncYouTube = Boolean(
-        config.youtubeAccessToken || (config.youtubeApiKey && cleanPlaylistId)
+        config.youtubeApiKey ||
+          config.youtubeAccessToken ||
+          cleanPlaylistId ||
+          cleanChannelId
       );
 
       if (canSyncYouTube) {
@@ -129,11 +139,12 @@ export const syncManager = {
             ytVideos = await youtubeService.fetchPlaylistVideos(
               cleanPlaylistId,
               config.youtubeApiKey,
-              config.youtubeAccessToken
+              oauthCleared ? '' : config.youtubeAccessToken,
+              cleanChannelId
             );
           } catch (firstErr) {
-            // If access token expired mid-session, force a silent/refresh-token renewal and retry once
-            if (config.youtubeOAuthClientId || config.youtubeRefreshToken) {
+            // If access token expired mid-session, force a silent/refresh-token renewal or fallback to API key / Direct Feed
+            if (!oauthCleared && (config.youtubeOAuthClientId || config.youtubeRefreshToken)) {
               const retryToken = await youtubeService.ensureValidAccessToken({
                 ...config,
                 youtubeAccessToken: '',
@@ -150,10 +161,16 @@ export const syncManager = {
                 ytVideos = await youtubeService.fetchPlaylistVideos(
                   cleanPlaylistId,
                   config.youtubeApiKey,
-                  config.youtubeAccessToken
+                  config.youtubeAccessToken,
+                  cleanChannelId
                 );
               } else {
-                throw firstErr;
+                ytVideos = await youtubeService.fetchPlaylistVideos(
+                  cleanPlaylistId,
+                  config.youtubeApiKey,
+                  '',
+                  cleanChannelId
+                );
               }
             } else {
               throw firstErr;
@@ -410,20 +427,18 @@ export const syncManager = {
     let currentVideos = storageService.getVideos();
     let enrichedData: Partial<VideoItem> = {};
 
-    // Try YouTube API enrichment if OAuth token or apiKey is available
-    if (config.youtubeAccessToken || config.youtubeApiKey) {
-      try {
-        const details = await youtubeService.fetchVideoDetails(
-          videoId,
-          config.youtubeApiKey,
-          config.youtubeAccessToken
-        );
-        if (details) {
-          enrichedData = details;
-        }
-      } catch {
-        // continue with manual details
+    // Try YouTube API or zero-key oEmbed enrichment
+    try {
+      const details = await youtubeService.fetchVideoDetails(
+        videoId,
+        config.youtubeApiKey,
+        config.youtubeAccessToken
+      );
+      if (details) {
+        enrichedData = details;
       }
+    } catch {
+      // continue with manual details
     }
 
     const defaultThumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
