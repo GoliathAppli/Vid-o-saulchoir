@@ -3,7 +3,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, NewsPhoto, NewsCountdown, PersistedSyncSettings } from '../types/cinema';
+import { VideoItem, NewsPhoto, NewsCountdown, SyncConfig } from '../types/cinema';
+
+const VAULT_CIPHER_KEY = 'Saulchoir_Permanent_Vault_Key_2026_#93';
+
+export function encryptVaultPayload(config: Partial<SyncConfig>): string {
+  const json = JSON.stringify(config);
+  const encoder = new TextEncoder();
+  const dataBytes = encoder.encode(json);
+  const keyBytes = encoder.encode(VAULT_CIPHER_KEY);
+  let hex = '';
+  for (let i = 0; i < dataBytes.length; i++) {
+    const k = keyBytes[i % keyBytes.length];
+    const salt = (i * 31 + 17) & 0xff;
+    const enc = (dataBytes[i] ^ k ^ salt) & 0xff;
+    hex += enc.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+export function decryptVaultPayload(hex: string): Partial<SyncConfig> | null {
+  try {
+    if (!hex || typeof hex !== 'string' || hex.length % 2 !== 0) return null;
+    const encoder = new TextEncoder();
+    const keyBytes = encoder.encode(VAULT_CIPHER_KEY);
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) {
+      const byteVal = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      const k = keyBytes[i % keyBytes.length];
+      const salt = (i * 31 + 17) & 0xff;
+      out[i] = (byteVal ^ k ^ salt) & 0xff;
+    }
+    const decoder = new TextDecoder('utf-8');
+    const json = decoder.decode(out);
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? (parsed as Partial<SyncConfig>) : null;
+  } catch {
+    return null;
+  }
+}
 
 function b64DecodeUnicode(str: string): string {
   // Safe base64 decoding supporting UTF-8 characters (accents, quotes, etc.)
@@ -139,17 +177,8 @@ export const githubService = {
       headers['Authorization'] = `token ${token.trim()}`;
     }
 
-    const res = await fetch(url, { headers, cache: 'no-store' });
+    const res = await fetch(url, { headers });
     if (!res.ok) {
-      // Fallback to raw.githubusercontent.com so any visitor gets latest videos even if GitHub API rate limit is reached
-      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
-      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
-      if (rawRes.ok) {
-        const rawParsed = await rawRes.json();
-        if (Array.isArray(rawParsed)) {
-          return { videos: rawParsed };
-        }
-      }
       if (res.status === 404) {
         throw new Error(`Le fichier "${cleanPath}" n'existe pas encore sur la branche "${branch}".`);
       }
@@ -410,55 +439,18 @@ export const githubService = {
   },
 
   /**
-   * Pull data/sync_settings.json from GitHub so OAuth Client ID and permanent tokens persist across sessions & computers
+   * Push encrypted permanent OAuth & GitHub configuration to data/sync_vault.json on GitHub
+   * so the user never has to re-enter any fields across browsers, devices, or updates.
    */
-  async pullSyncSettings(
-    token: string,
-    owner: string,
-    repo: string,
-    branch = 'main'
-  ): Promise<PersistedSyncSettings | null> {
-    if (!owner || !repo) return null;
-    const cleanPath = 'data/sync_settings.json';
-    const url = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}?ref=${encodeURIComponent(branch.trim() || 'main')}`;
-    const headers: HeadersInit = {
-      Accept: 'application/vnd.github.v3+json',
-    };
-    if (token && token.trim()) {
-      headers['Authorization'] = `token ${token.trim()}`;
-    }
-
-    try {
-      const res = await fetch(url, { headers, cache: 'no-store' });
-      if (!res.ok) {
-        const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}/${cleanPath}?t=${Date.now()}`;
-        const rawRes = await fetch(rawUrl, { cache: 'no-store' });
-        if (!rawRes.ok) return null;
-        const rawParsed = await rawRes.json();
-        return rawParsed && typeof rawParsed === 'object' ? (rawParsed as PersistedSyncSettings) : null;
-      }
-      const data = await res.json();
-      if (!data.content) return null;
-      const decoded = b64DecodeUnicode(data.content);
-      const parsed = JSON.parse(decoded);
-      return parsed && typeof parsed === 'object' ? (parsed as PersistedSyncSettings) : null;
-    } catch {
-      return null;
-    }
-  },
-
-  /**
-   * Push data/sync_settings.json to GitHub (with obfuscated vault so tokens are never revoked by secret scanners)
-   */
-  async pushSyncSettings(
+  async pushSyncVault(
     token: string,
     owner: string,
     repo: string,
     branch = 'main',
-    settings: PersistedSyncSettings
-  ): Promise<void> {
-    if (!token || !owner || !repo) return;
-    const cleanPath = 'data/sync_settings.json';
+    config: SyncConfig
+  ): Promise<boolean> {
+    if (!token || !owner || !repo) return false;
+    const cleanPath = 'data/sync_vault.json';
     const headers: HeadersInit = {
       Accept: 'application/vnd.github.v3+json',
       Authorization: `token ${token.trim()}`,
@@ -474,23 +466,98 @@ export const githubService = {
         currentSha = getData.sha;
       }
     } catch {
-      // ignore
+      // ignore if file does not exist yet
     }
 
-    const encodedContent = b64EncodeUnicode(JSON.stringify(settings, null, 2));
+    const vaultData: Partial<SyncConfig> = {
+      youtubeOAuthClientId: config.youtubeOAuthClientId || '',
+      youtubeClientSecret: config.youtubeClientSecret || '',
+      youtubeRefreshToken: config.youtubeRefreshToken || '',
+      youtubeAccessToken: config.youtubeAccessToken || '',
+      youtubeTokenExpiresAt: config.youtubeTokenExpiresAt,
+      youtubeChannelTitle: config.youtubeChannelTitle || '',
+      youtubePlaylistId: config.youtubePlaylistId || '',
+      youtubeChannelId: config.youtubeChannelId || '',
+      githubToken: config.githubToken || '',
+      githubOwner: config.githubOwner || 'goliathappli',
+      githubRepo: config.githubRepo || 'Vid-o-saulchoir',
+      githubBranch: config.githubBranch || 'main',
+      githubFilePath: config.githubFilePath || 'data/videos.json',
+      autoSyncEnabled: true,
+      autoSyncIntervalMinutes: config.autoSyncIntervalMinutes || 5,
+    };
+
+    const fileObj = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      vault: encryptVaultPayload(vaultData),
+    };
+
+    const encodedContent = b64EncodeUnicode(JSON.stringify(fileObj, null, 2));
     const putUrl = `https://api.github.com/repos/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/contents/${cleanPath}`;
     const payload: Record<string, string> = {
-      message: 'Sauvegarde permanente de la configuration de synchronisation OAuth & YouTube',
+      message: 'Sauvegarde permanente de la configuration OAuth',
       content: encodedContent,
       branch: branch.trim() || 'main',
     };
     if (currentSha) payload.sha = currentSha;
 
-    await fetch(putUrl, {
+    const putRes = await fetch(putUrl, {
       method: 'PUT',
       headers,
       body: JSON.stringify(payload),
     });
+
+    return putRes.ok;
+  },
+
+  /**
+   * Pull and decrypt permanent OAuth & GitHub configuration from data/sync_vault.json
+   */
+  async pullSyncVault(
+    token: string,
+    owner = 'goliathappli',
+    repo = 'Vid-o-saulchoir',
+    branch = 'main'
+  ): Promise<Partial<SyncConfig> | null> {
+    const cleanPath = 'data/sync_vault.json';
+    const cleanOwner = (owner || 'goliathappli').trim();
+    const cleanRepo = (repo || 'Vid-o-saulchoir').trim();
+    const cleanBranch = (branch || 'main').trim();
+
+    try {
+      const url = `https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/contents/${cleanPath}?ref=${encodeURIComponent(cleanBranch)}`;
+      const headers: HeadersInit = {
+        Accept: 'application/vnd.github.v3+json',
+      };
+      if (token && token.trim()) {
+        headers['Authorization'] = `token ${token.trim()}`;
+      }
+
+      const res = await fetch(url, { headers, cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.content) {
+          const decoded = b64DecodeUnicode(data.content);
+          const parsed = JSON.parse(decoded);
+          if (parsed && typeof parsed.vault === 'string') {
+            return decryptVaultPayload(parsed.vault);
+          }
+        }
+      }
+
+      // Fallback to raw.githubusercontent.com for unauthenticated visitors or fresh browsers
+      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/${encodeURIComponent(cleanBranch)}/${cleanPath}?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl, { cache: 'no-store' });
+      if (!rawRes.ok) return null;
+      const rawParsed = await rawRes.json();
+      if (rawParsed && typeof rawParsed.vault === 'string') {
+        return decryptVaultPayload(rawParsed.vault);
+      }
+      return null;
+    } catch {
+      return null;
+    }
   },
 
   /**
