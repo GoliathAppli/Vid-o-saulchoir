@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { VideoItem, VideoCategory, VIDEO_CATEGORIES, normalizeVideoCategory } from '../types/cinema';
+import { VideoItem, VideoCategory, VIDEO_CATEGORIES, normalizeVideoCategory, SeasonalThemeId } from '../types/cinema';
+import { SEASONAL_THEMES } from '../utils/seasonalTheme';
 import { storageService } from '../services/storageService';
 import {
-  Search, Play, EyeOff, Film, ChevronDown, ChevronRight,
+  Search, Play, Film, ChevronDown, ChevronRight,
   X, Plus, Check, ArrowRight, Sparkles
 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ interface ArchiveSectionProps {
   isAdmin: boolean;
   onEditVideo?: (video: VideoItem) => void;
   onMoveVideosToCategory?: (videoIds: string[], targetCategory: VideoCategory) => void;
+  seasonalTheme?: SeasonalThemeId;
 }
 
 /**
@@ -79,9 +81,10 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
   allVideos,
   onSelectVideo,
   isAdmin,
-  onEditVideo,
   onMoveVideosToCategory,
+  seasonalTheme = 'default',
 }) => {
+  const themeInfo = SEASONAL_THEMES[seasonalTheme] || SEASONAL_THEMES.default;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<VideoCategory>("Vidéos d'atelier");
   const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
@@ -176,7 +179,12 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
   };
 
   return (
-    <section id="archives" className="py-10 sm:py-16">
+    <section id="archives" className="relative py-10 sm:py-16">
+      {/* Subtle Seasonal Ambient Glow behind Archives */}
+      <div
+        className={`absolute top-40 left-1/2 -translate-x-1/2 w-4/5 max-w-5xl h-96 ${themeInfo.ambientGlowSecondary} blur-[150px] pointer-events-none -z-10 rounded-full`}
+      />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* 3 MAIN CATEGORIES ("Vidéos d'atelier", "Vidéos avec Vaulx", "Pom's D'or") */}
@@ -193,8 +201,8 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                 onClick={() => setSelectedCategory(category)}
                 className={`group relative rounded-2xl p-6 border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between text-center gap-3.5 ${
                   isSelected
-                    ? 'bg-gradient-to-b from-amber-500/30 via-amber-950/40 to-zinc-950 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.35)] -translate-y-1 scale-[1.02]'
-                    : 'bg-gradient-to-b from-zinc-900/90 to-zinc-950 hover:from-zinc-800/90 hover:to-zinc-900 border-amber-500/30 hover:border-amber-400/70 shadow-xl shadow-black/60 hover:-translate-y-1'
+                    ? `bg-gradient-to-b ${themeInfo.frameGradientClass} ${themeInfo.frameBorderClass} -translate-y-1 scale-[1.02]`
+                    : `bg-gradient-to-b from-zinc-900/90 to-zinc-950 hover:from-zinc-800/90 hover:to-zinc-900 ${themeInfo.sectionBorderClass} ${themeInfo.cardHoverBorderClass} shadow-xl shadow-black/60 hover:-translate-y-1`
                 }`}
               >
                 {/* Top luminous indicator bar */}
@@ -312,7 +320,7 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
               {selectedCategory}
             </h2>
           </div>
-          <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent mt-3" />
+          <div className={`w-24 h-0.5 bg-gradient-to-r from-transparent ${themeInfo.dividerGradientClass} to-transparent mt-3`} />
         </div>
 
         {/* Chronological Archives Display (By Year / Month) for Selected Category */}
@@ -362,7 +370,7 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                   {/* MAIN SECTION: ANNÉE (Year) - Centered */}
                   <div
                     onClick={() => toggleYear(yearGroup.year)}
-                    className="relative flex flex-col items-center justify-center py-4 border-b-2 border-amber-500/40 cursor-pointer group select-none mb-8 text-center"
+                    className={`relative flex flex-col items-center justify-center py-4 border-b-2 ${themeInfo.sectionBorderClass} cursor-pointer group select-none mb-8 text-center`}
                   >
                     <div className="flex items-center justify-center gap-3">
                       <button className="text-amber-400 group-hover:text-amber-300 transition-colors">
@@ -372,12 +380,12 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                           <ChevronRight className="w-6 h-6" />
                         )}
                       </button>
-                      <h3 className="font-cinzel text-2xl sm:text-3xl font-bold text-zinc-100 tracking-wider uppercase">
+                      <h3 className={`font-cinzel text-2xl sm:text-3xl font-bold tracking-wider uppercase ${themeInfo.titleClass}`}>
                         Année {yearGroup.year}
                       </h3>
                     </div>
 
-                    <span className="mt-1.5 sm:mt-0 sm:absolute sm:right-0 text-xs font-mono text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-white/5">
+                    <span className="mt-1.5 sm:mt-0 sm:absolute sm:right-0 text-xs font-mono text-zinc-400 tabular-nums">
                       {yearGroup.totalVideos} {yearGroup.totalVideos > 1 ? 'œuvres' : 'œuvre'}
                     </span>
                   </div>
@@ -390,17 +398,16 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                           
                           {/* SUB-SECTION: MOIS (Month) - Centered */}
                           <div className="flex items-center justify-center gap-3 mb-6">
-                            <div className="flex-1 h-px bg-gradient-to-r from-transparent to-amber-500/25" />
-                            <div className="flex items-center gap-2.5 px-3">
-                              <span className="w-2 h-2 rounded-full bg-amber-400/80" />
+                            <div className={`flex-1 h-px bg-gradient-to-r from-transparent ${themeInfo.dividerGradientClass}`} />
+                            <div className="flex items-center gap-2 px-3">
                               <h4 className="font-cinzel text-lg sm:text-xl text-amber-100/90 font-semibold tracking-wider uppercase text-center">
                                 {monthGroup.monthName} {yearGroup.year}
                               </h4>
-                              <span className="text-xs text-zinc-500 font-mono">
-                                ({monthGroup.videos.length})
+                              <span className="text-xs text-zinc-400 font-mono tabular-nums">
+                                · {monthGroup.videos.length}
                               </span>
                             </div>
-                            <div className="flex-1 h-px bg-gradient-to-l from-transparent to-amber-500/25" />
+                            <div className={`flex-1 h-px bg-gradient-to-l from-transparent ${themeInfo.dividerGradientClass}`} />
                           </div>
 
                           {/* Grid of video cards for this month */}
@@ -409,7 +416,7 @@ export const ArchiveSection: React.FC<ArchiveSectionProps> = ({
                               <article
                                 key={video.id}
                                 onClick={() => onSelectVideo(video)}
-                                className="group bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 rounded-lg overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/50 text-center"
+                                className={`group bg-zinc-950/70 hover:bg-zinc-900/75 border ${themeInfo.sectionBorderClass} ${themeInfo.cardHoverBorderClass} rounded-xl overflow-hidden transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-black/60 text-center`}
                               >
                                 {/* 16:9 Thumbnail container */}
                                 <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
