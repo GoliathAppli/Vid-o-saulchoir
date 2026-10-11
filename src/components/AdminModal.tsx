@@ -94,6 +94,40 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // Copy workflow yaml
   const [copiedYaml, setCopiedYaml] = useState(false);
 
+  // Helper to update config state AND immediately persist to localStorage so fields never need to be re-entered
+  const updateConfigField = (partial: Partial<SyncConfig>) => {
+    setConfig(prev => {
+      const next = { ...prev, ...partial };
+      storageService.saveConfig(next);
+      return next;
+    });
+  };
+
+  // Reload config from storage & remote GitHub vault whenever modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    const latestLocal = storageService.getConfig();
+    setConfig(latestLocal);
+    setSyncLogs(storageService.getLogs());
+
+    if (latestLocal.githubOwner && latestLocal.githubRepo) {
+      githubService
+        .pullSyncVault(
+          latestLocal.githubToken,
+          latestLocal.githubOwner,
+          latestLocal.githubRepo,
+          latestLocal.githubBranch || 'main'
+        )
+        .then(remoteVault => {
+          if (remoteVault) {
+            const merged = storageService.mergeRemoteVault(remoteVault);
+            setConfig(merged);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
   // Synchronize editing target if passed from parent
   useEffect(() => {
     if (editingVideoTarget) {
@@ -115,38 +149,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   }, [editingVideoTarget]);
 
-  // Whenever AdminModal opens, reload config from localStorage and remote GitHub sync_settings.json so OAuth Client ID is always pre-filled
-  useEffect(() => {
-    if (!isOpen) return;
-    const latestLocal = storageService.getConfig();
-    setConfig(latestLocal);
-    setSyncLogs(storageService.getLogs());
-
-    const owner = latestLocal.githubOwner || 'goliathappli';
-    const repo = latestLocal.githubRepo || 'Vid-o-saulchoir';
-    const branch = latestLocal.githubBranch || 'main';
-    if (owner && repo) {
-      githubService
-        .pullSyncSettings(latestLocal.githubToken, owner, repo, branch)
-        .then(remote => {
-          if (remote) {
-            const merged = storageService.mergeRemoteSyncSettings(remote);
-            setConfig(merged);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen]);
-
-  // Helper to update config state AND immediately persist to localStorage so OAuth Client ID is never lost
-  const updateAndPersistConfig = (patch: Partial<SyncConfig>) => {
-    setConfig(prev => {
-      const next = { ...prev, ...patch };
-      storageService.saveConfig(next);
-      return next;
-    });
-  };
-
   // Handle password submit
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +166,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // Save config and immediately synchronize
   const handleSaveConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId) || 'UUdOuEvwdKc0qr7_hxGF9_gA';
+    const cleanPlaylistId = extractPlaylistId(config.youtubePlaylistId);
     const normalizedConfig: SyncConfig = {
       ...config,
       youtubeOAuthClientId: (config.youtubeOAuthClientId || '').trim(),
@@ -177,30 +179,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       githubOwner: config.githubOwner.trim() || 'goliathappli',
       githubRepo: config.githubRepo.trim() || 'Vid-o-saulchoir',
       autoSyncEnabled: true,
-      autoSyncIntervalMinutes: 2,
     };
     setConfig(normalizedConfig);
     storageService.saveConfig(normalizedConfig);
     setConfigSavedToast(true);
     setTimeout(() => setConfigSavedToast(false), 2500);
 
-    // If a GitHub token is present, run the visual GitHub progress bar verification & sync
+    // Save encrypted permanent vault to GitHub so fields never need to be re-entered on any device
     if (normalizedConfig.githubToken) {
+      await githubService
+        .pushSyncVault(
+          normalizedConfig.githubToken,
+          normalizedConfig.githubOwner,
+          normalizedConfig.githubRepo,
+          normalizedConfig.githubBranch || 'main',
+          normalizedConfig
+        )
+        .catch(() => {});
       await runGitHubTokenSyncWithProgress(normalizedConfig);
     }
 
-    // Automatically trigger full synchronization as soon as OAuth/API/Playlist or GitHub data is saved
+    // Automatically trigger full synchronization as soon as OAuth or GitHub data is saved
     if (
-      normalizedConfig.youtubeOAuthClientId ||
       normalizedConfig.youtubeAccessToken ||
-      (normalizedConfig.youtubeApiKey && normalizedConfig.youtubePlaylistId) ||
+      normalizedConfig.youtubeRefreshToken ||
       (normalizedConfig.githubOwner && normalizedConfig.githubRepo)
     ) {
       setIsSyncing(true);
       setSyncStatusMsg('Synchronisation automatique en cours...');
-      const result = await syncManager.runFullSync(normalizedConfig, { forceGitHubPush: true });
-      if (result.config) {
-        setConfig(result.config);
+      const result = await syncManager.runFullSync(normalizedConfig);
+      if (result.updatedConfig) {
+        setConfig(result.updatedConfig);
       }
       setIsSyncing(false);
       setSyncStatusMsg(result.message);
@@ -269,15 +278,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         `Synchronisation GitHub vérifiée (${currentVids.length} vidéo(s))`
       );
 
-      // Also persist encrypted OAuth & sync settings to GitHub so OAuth Client ID is never lost
-      const encodedSettings = storageService.encodeSyncSettings(cfg);
-      await githubService.pushSyncSettings(
-        cfg.githubToken,
-        cfg.githubOwner || 'goliathappli',
-        cfg.githubRepo || 'Vid-o-saulchoir',
-        cfg.githubBranch || 'main',
-        encodedSettings
-      );
+      // Also persist encrypted permanent configuration vault on GitHub
+      await githubService
+        .pushSyncVault(
+          cfg.githubToken,
+          cfg.githubOwner || 'goliathappli',
+          cfg.githubRepo || 'Vid-o-saulchoir',
+          cfg.githubBranch || 'main',
+          cfg
+        )
+        .catch(() => {});
 
       // Step 3: 100% - Complete!
       const successMsg = `Synchronisation GitHub réussie à 100% avec le Token ! (${currentVids.length} vidéo(s) sauvegardée(s) sur ${cfg.githubOwner}/${cfg.githubRepo})`;
@@ -312,71 +322,71 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Connect via Google OAuth 2.0 Client ID (Permanent connection) and immediately synchronize all unlisted videos
-  const handleConnectOAuthAndSync = async (silentOnly = false) => {
+  // Connect via Google OAuth 2.0 (Permanent Refresh Token if Client Secret provided) and immediately synchronize
+  const handleConnectOAuthAndSync = async () => {
     setOauthConnecting(true);
     setYtTestResult(null);
     try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('atelier_cinema_oauth_cleared');
-      }
-
-      const oauthRes = await youtubeService.connectOAuthPermanent(
+      const oauthRes = await youtubeService.connectPermanentOAuth(
         config.youtubeOAuthClientId || '',
-        config.youtubeClientSecret || '',
-        config.youtubeUserEmail || '',
-        {
-          silentOnly,
-          existingRefreshToken: config.youtubeRefreshToken || '',
-        }
+        config.youtubeClientSecret || ''
       );
 
       // Always resolve the authenticated channel's uploads playlist via OAuth 2.0
       let targetPlaylistId = '';
+      let channelTitle = config.youtubeChannelTitle || '';
       let channelLabel = '';
       try {
-        const channelInfo = await youtubeService.getAuthenticatedUploadsPlaylistId(
-          oauthRes.accessToken
-        );
+        const channelInfo = await youtubeService.getAuthenticatedUploadsPlaylistId(oauthRes.accessToken);
         targetPlaylistId = channelInfo.uploadsPlaylistId;
+        channelTitle = channelInfo.channelTitle;
         channelLabel = ` (Chaîne : ${channelInfo.channelTitle})`;
       } catch {
-        targetPlaylistId =
-          extractPlaylistId(config.youtubePlaylistId) || 'UUdOuEvwdKc0qr7_hxGF9_gA';
+        targetPlaylistId = extractPlaylistId(config.youtubePlaylistId);
       }
+
+      const finalRefreshToken = oauthRes.refreshToken || config.youtubeRefreshToken || '';
 
       const updatedConfig: SyncConfig = {
         ...config,
         youtubeOAuthClientId: (config.youtubeOAuthClientId || '').trim(),
         youtubeClientSecret: (config.youtubeClientSecret || '').trim(),
-        youtubeRefreshToken: oauthRes.refreshToken || config.youtubeRefreshToken || '',
+        youtubeRefreshToken: finalRefreshToken,
         youtubeAccessToken: oauthRes.accessToken,
-        youtubeTokenExpiry: oauthRes.tokenExpiry,
-        youtubeUserEmail: oauthRes.userEmail || config.youtubeUserEmail || '',
+        youtubeTokenExpiresAt: oauthRes.expiresAt,
+        youtubeChannelTitle: channelTitle,
         youtubePlaylistId: targetPlaylistId,
         autoSyncEnabled: true,
-        autoSyncIntervalMinutes: 2,
       };
 
       setConfig(updatedConfig);
       storageService.saveConfig(updatedConfig);
 
-      const hasPermanentRefresh = Boolean(updatedConfig.youtubeRefreshToken && updatedConfig.youtubeClientSecret);
+      // Immediately save encrypted permanent config vault to GitHub so all fields & Refresh Token are permanent
+      if (updatedConfig.githubToken && updatedConfig.githubOwner && updatedConfig.githubRepo) {
+        await githubService
+          .pushSyncVault(
+            updatedConfig.githubToken,
+            updatedConfig.githubOwner,
+            updatedConfig.githubRepo,
+            updatedConfig.githubBranch || 'main',
+            updatedConfig
+          )
+          .catch(() => {});
+      }
+
       setYtTestResult({
         success: true,
-        message: hasPermanentRefresh
-          ? `Connexion OAuth 2.0 PERMANENTE à vie activée${channelLabel} (Refresh Token mémorisé dans GitHub) ! 100% de vos vidéos non répertoriées se synchronisent désormais automatiquement sans jamais redemander de téléphone.`
-          : `Connexion OAuth 2.0 activée${channelLabel} ! Toutes vos vidéos non répertoriées sont synchronisées. (Astuce : ajoutez aussi le Code Secret Client GOCSPX-... pour obtenir un Refresh Token permanent qui n'expire jamais).`,
+        message: finalRefreshToken
+          ? `Connexion OAuth 2.0 Permanente activée à vie${channelLabel} ! Vos nouvelles vidéos YouTube apparaîtront désormais toutes seules sur le site.`
+          : `Authentification OAuth 2.0 réussie${channelLabel} ! (Astuce : ajoutez le Code secret du client pour ne plus jamais avoir d'expiration après 1h).`,
       });
 
       setIsSyncing(true);
-      setSyncStatusMsg('Synchronisation OAuth 2.0 (vidéos publiques + toutes les non répertoriées) en cours...');
-      const result = await syncManager.runFullSync(updatedConfig, { forceGitHubPush: true });
-      if (result.config) {
-        setConfig(result.config);
-      }
+      setSyncStatusMsg('Synchronisation OAuth 2.0 en cours...');
+      const result = await syncManager.runFullSync(updatedConfig);
       if (updatedConfig.githubToken) {
-        await runGitHubTokenSyncWithProgress(result.config || updatedConfig);
+        await runGitHubTokenSyncWithProgress(updatedConfig);
       }
       setIsSyncing(false);
       setSyncStatusMsg(result.message);
@@ -393,79 +403,25 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Activate Phone-Free Mode (clears any broken/deleted OAuth Client ID and syncs via API Key or Direct Channel Feed)
-  const handleActivatePhoneFreeMode = async () => {
-    setYtTesting(true);
-    setYtTestResult(null);
-    try {
-      const cleaned = storageService.clearOAuthCredentials();
-      const cleanPlaylistId =
-        extractPlaylistId(config.youtubePlaylistId) || 'UUdOuEvwdKc0qr7_hxGF9_gA';
-      const updatedConfig: SyncConfig = {
-        ...cleaned,
-        youtubeApiKey: (config.youtubeApiKey || '').trim(),
-        youtubePlaylistId: cleanPlaylistId,
-        youtubeChannelId: (config.youtubeChannelId || 'UCdOuEvwdKc0qr7_hxGF9_gA').trim(),
-        githubToken: (config.githubToken || '').trim(),
-        githubOwner: (config.githubOwner || 'goliathappli').trim(),
-        githubRepo: (config.githubRepo || 'Vid-o-saulchoir').trim(),
-        autoSyncEnabled: true,
-        autoSyncIntervalMinutes: 2,
-      };
-
-      setConfig(updatedConfig);
-      storageService.saveConfig(updatedConfig);
-
-      const testRes = await youtubeService.testConnection(
-        updatedConfig.youtubeApiKey,
-        updatedConfig.youtubePlaylistId,
-        '',
-        updatedConfig.youtubeChannelId
-      );
-      setYtTestResult({
-        success: testRes.success,
-        message:
-          'Ancien ID OAuth bloqué supprimé ! ' +
-          (testRes.message ||
-            'Synchronisation sans téléphone activée (aucune fenêtre de connexion Google requise).'),
-      });
-
-      setIsSyncing(true);
-      setSyncStatusMsg('Synchronisation sans téléphone en cours...');
-      const result = await syncManager.runFullSync(updatedConfig, { forceGitHubPush: true });
-      if (result.config) {
-        setConfig(result.config);
-      }
-      if (updatedConfig.githubToken) {
-        await runGitHubTokenSyncWithProgress(result.config || updatedConfig);
-      }
-      setIsSyncing(false);
-      setSyncStatusMsg(result.message);
-      setSyncLogs(storageService.getLogs());
-      onCatalogUpdated(result.videos);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors de la synchronisation';
-      setYtTestResult({
-        success: false,
-        message: msg,
-      });
-    } finally {
-      setYtTesting(false);
-    }
-  };
-
-  // Test YouTube connection
+  // Test YouTube connection (auto-refreshes OAuth token if permanent Refresh Token is saved)
   const handleTestYouTube = async () => {
     setYtTesting(true);
     setYtTestResult(null);
+    const tokenInfo = await youtubeService.ensureValidAccessToken(config, false);
+    const activeToken = tokenInfo.accessToken || config.youtubeAccessToken;
     const res = await youtubeService.testConnection(
       config.youtubeApiKey,
       config.youtubePlaylistId,
-      config.youtubeAccessToken,
-      config.youtubeChannelId
+      activeToken
     );
-    if (res.success && res.resolvedPlaylistId && !config.youtubePlaylistId) {
-      const updated = { ...config, youtubePlaylistId: res.resolvedPlaylistId };
+    if (res.success) {
+      const updated: SyncConfig = {
+        ...config,
+        youtubeAccessToken: activeToken,
+        youtubeTokenExpiresAt: tokenInfo.expiresAt || config.youtubeTokenExpiresAt,
+        youtubePlaylistId: res.resolvedPlaylistId || config.youtubePlaylistId,
+        youtubeChannelTitle: res.title || config.youtubeChannelTitle,
+      };
       setConfig(updated);
       storageService.saveConfig(updated);
     }
@@ -808,7 +764,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 }`}
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>1. Connexions API & Dépôt</span>
+                <span>1. Connexion OAuth Permanente & Dépôt</span>
               </button>
 
               <button
@@ -851,16 +807,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             {/* Tab Body */}
             <div className="overflow-y-auto flex-1 p-6 space-y-6">
 
-              {/* TAB 1: API CONFIGURATION (YouTube + GitHub) */}
+              {/* TAB 1: PERMANENT OAUTH CONFIGURATION (YouTube + GitHub) */}
               {activeTab === 'config' && (
                 <div className="space-y-8">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="font-serif-cinema text-xl text-zinc-100 font-semibold">
-                        Liaison des Services YouTube & GitHub
+                        Connexion Permanente OAuth 2.0 YouTube & GitHub
                       </h3>
                       <p className="text-xs text-zinc-400 mt-1">
-                        Configurez vos identifiants d'API pour permettre la détection et la synchronisation automatique des vidéos (notamment non répertoriées).
+                        Tous vos champs sont mémorisés définitivement. Dès que vous ajoutez une vidéo sur YouTube, elle apparaît toute seule sur le site sans repasser par l'espace administrateur.
                       </p>
                     </div>
 
@@ -880,7 +836,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         {isSyncing
                           ? 'Synchronisation...'
                           : configSavedToast
-                          ? 'Synchronisé !'
+                          ? 'Mémorisé & Synchronisé !'
                           : 'Enregistrer et synchroniser'}
                       </span>
                     </button>
@@ -893,261 +849,195 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
                   )}
 
-                  {/* YouTube Synchronization Section (OAuth 2.0 Permanent for ALL Unlisted Videos + Optional Playlist/API Key) */}
+                  {/* YouTube OAuth 2.0 Section */}
                   <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5 space-y-5">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
-                      <div className="flex items-center gap-2 text-zinc-200 font-medium text-sm flex-wrap">
+                      <div className="flex flex-wrap items-center gap-2 text-zinc-200 font-medium text-sm">
                         <Youtube className="w-4 h-4 text-red-500" />
-                        <span>Synchronisation Automatique des Vidéos Non Répertoriées (OAuth 2.0 Permanent)</span>
-                        {config.youtubeRefreshToken && config.youtubeClientSecret ? (
-                          <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-mono flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            OAuth Permanent Actif à Vie (Refresh Token)
+                        <span>Connexion YouTube 100% OAuth 2.0 Permanente (Sans API)</span>
+                        {config.youtubeRefreshToken ? (
+                          <span className="px-2.5 py-0.5 text-[10px] rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Connexion Permanente Active (24h/24 · Sans expiration)</span>
                           </span>
                         ) : config.youtubeAccessToken ? (
-                          <span className="px-2 py-0.5 text-[10px] rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            Session OAuth Active (Ajoutez le Code Secret pour la rendre permanente)
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono">
+                            OAuth Connecté (Ajoutez le Code secret ci-dessous pour le rendre permanent)
                           </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono">
-                            En attente de liaison OAuth 2.0
-                          </span>
-                        )}
+                        ) : null}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {config.youtubeOAuthClientId && (
+                      <button
+                        type="button"
+                        onClick={handleTestYouTube}
+                        disabled={ytTesting}
+                        className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${ytTesting ? 'animate-spin' : ''}`} />
+                        <span>Tester la connexion</span>
+                      </button>
+                    </div>
+
+                    {/* Step-by-step helper for Google OAuth Client ID + Client Secret */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-amber-500/20 text-xs text-zinc-300 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-amber-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                          <span>Comment activer la connexion OAuth permanente une seule fois pour toutes ?</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={`https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=${
+                              config.youtubeOAuthClientId?.trim().match(/^([0-9]{6,})-/)?.[1] || '1074410366134'
+                            }`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>1. Autoriser le service YouTube sur mon projet OAuth</span>
+                          </a>
+                          <a
+                            href="https://console.cloud.google.com/apis/credentials"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 rounded text-[11px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>2. Ouvrir mes Identifiants OAuth</span>
+                          </a>
+                        </div>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 text-[11px] text-zinc-400">
+                        <li>
+                          <strong>Important (1 seule fois) :</strong> Même sans clé API (100% OAuth), cliquez sur le bouton vert <strong>« 1. Autoriser le service YouTube sur mon projet OAuth »</strong> ci-dessus puis cliquez sur le bouton bleu <strong>« Activer » (Enable)</strong> dans Google Cloud pour autoriser votre jeton OAuth à lire vos vidéos YouTube.
+                        </li>
+                        <li>
+                          Dans Google Cloud (<em>Identifiants</em> ➔ votre <strong>ID client OAuth 2.0</strong>), vérifiez que <strong>Origines JavaScript autorisées</strong> contient :
+                          <code className="mx-1.5 px-2 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-amber-300 font-mono">
+                            {typeof window !== 'undefined' ? window.location.origin : ''}
+                          </code>
                           <button
                             type="button"
-                            onClick={handleActivatePhoneFreeMode}
-                            disabled={ytTesting || isSyncing}
-                            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-red-950/60 text-zinc-300 hover:text-red-300 text-[11px] rounded border border-zinc-700 hover:border-red-500/40 transition-colors cursor-pointer disabled:opacity-50"
+                            onClick={() => {
+                              if (typeof window !== 'undefined') {
+                                navigator.clipboard.writeText(window.location.origin);
+                                setCopiedOrigin(true);
+                                setTimeout(() => setCopiedOrigin(false), 2000);
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[10px] inline-flex items-center gap-1 cursor-pointer border border-zinc-700 align-middle"
                           >
-                            Réinitialiser l'ID OAuth bloqué
+                            {copiedOrigin ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedOrigin ? 'Copié !' : 'Copier l\'URL'}</span>
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleTestYouTube}
-                          disabled={ytTesting}
-                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${ytTesting ? 'animate-spin' : ''}`} />
-                          <span>Tester la connexion</span>
-                        </button>
-                      </div>
+                        </li>
+                        <li>
+                          Copiez l'<strong>ID client</strong> <strong>ET</strong> le <strong>Code secret du client</strong> puis cliquez sur <strong>« Activer la Connexion OAuth Permanente »</strong>.
+                        </li>
+                      </ol>
                     </div>
 
                     {ytTestResult && (
-                      <div className={`p-3 rounded text-xs flex items-center gap-2 ${
+                      <div className={`p-3.5 rounded-lg text-xs flex flex-col gap-2.5 ${
                         ytTestResult.success
                           ? 'bg-emerald-950/60 border border-emerald-600/30 text-emerald-300'
                           : 'bg-red-950/60 border border-red-600/30 text-red-300'
                       }`}>
-                        {ytTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                        <span>{ytTestResult.message}</span>
+                        <div className="flex items-start gap-2">
+                          {ytTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                          <span>{ytTestResult.message}</span>
+                        </div>
+                        {!ytTestResult.success &&
+                          (ytTestResult.message.includes('has not been used in project') ||
+                            ytTestResult.message.includes('it is disabled') ||
+                            ytTestResult.message.includes('connecteur YouTube')) && (
+                            <div className="pl-6">
+                              <a
+                                href={
+                                  youtubeService.extractProjectEnableUrl(
+                                    ytTestResult.message,
+                                    config.youtubeOAuthClientId
+                                  )?.url ||
+                                  'https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=1074410366134'
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-md inline-flex items-center gap-1.5 text-xs transition-colors shadow"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>
+                                  Cliquez ici puis sur « Activer » dans Google Cloud (Projet{' '}
+                                  {youtubeService.extractProjectEnableUrl(
+                                    ytTestResult.message,
+                                    config.youtubeOAuthClientId
+                                  )?.projectId || '1074410366134'}
+                                  )
+                                </span>
+                              </a>
+                            </div>
+                          )}
                       </div>
                     )}
 
-                    {/* Step-by-step guide: How to connect OAuth 2.0 for ALL Unlisted Videos WITHOUT the other phone */}
-                    <div className="p-4 rounded-lg bg-amber-950/20 border border-amber-500/30 text-xs text-zinc-200 space-y-3">
-                      {/* Direct fix for Erreur 403 : access_denied */}
-                      <div className="p-3 rounded-lg bg-red-950/40 border border-red-500/40 space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="font-semibold text-red-300 flex items-center gap-1.5 text-xs">
-                            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                            <span>Vous voyez « Erreur 403 : access_denied (n'a pas terminé la procédure de validation) » ?</span>
-                          </div>
-                          <a
-                            href="https://console.cloud.google.com/apis/credentials/consent"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 rounded text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Ouvrir Écran d'autorisation OAuth (Audience)</span>
-                          </a>
-                        </div>
-                        <div className="text-[11px] text-zinc-200 leading-relaxed space-y-1">
-                          <p>
-                            C'est tout à fait normal lors de la création d'un ID OAuth : par défaut, Google bloque l'application tant qu'elle est en mode <strong>« Test »</strong> sans testeur autorisé. Pour débloquer définitivement l'accès en 10 secondes sur Google Cloud (menu <strong>Écran d'autorisation OAuth</strong> ou <strong>Google Auth Platform → Audience</strong>) :
-                          </p>
-                          <ul className="list-disc list-inside space-y-1 text-zinc-300">
-                            <li>
-                              <strong>Action 1 (Recommandée & Permanente) :</strong> Sous <em>État de publication (Testing)</em>, cliquez sur le bouton <strong>« PUBLIER L'APPLICATION » (Publish App)</strong> puis confirmez. <em>(Cela supprime le blocage 403 pour tous vos comptes ET empêche le jeton d'expirer au bout de 7 jours !)</em>
-                            </li>
-                            <li>
-                              <strong>OU Action 2 (Mode Test) :</strong> Dans la rubrique <strong>« Utilisateurs de test » (Test users)</strong>, cliquez sur <strong>« + ADD USERS »</strong> et ajoutez <code className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-amber-300 font-mono select-all">fabien.piazza@hotmail.fr</code> (ainsi que l'adresse email de la chaîne YouTube).
-                            </li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                        <div className="font-semibold text-amber-300 flex items-center gap-1.5 text-sm">
-                          <Sparkles className="w-4 h-4 shrink-0" />
-                          <span>Comment synchroniser 100% des vidéos NON RÉPERTORIÉES en OAuth 2.0 SANS l'autre téléphone ?</span>
-                        </div>
-                        <a
-                          href="https://console.cloud.google.com/apis/credentials"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 rounded text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Ouvrir Google Cloud Credentials</span>
-                        </a>
-                      </div>
-
-                      <div className="space-y-2 text-[11px] text-zinc-300 leading-relaxed">
-                        <p>
-                          <strong>Pourquoi OAuth 2.0 est indispensable :</strong> YouTube bloque la détection automatique des nouvelles vidéos <em>Non répertoriées</em> (hors playlist) avec une simple clé API. Seule la connexion <strong>OAuth 2.0 (`forMine=true`)</strong> détecte automatiquement toutes vos vidéos non répertoriées dès leur mise en ligne.
-                        </p>
-                        <div className="p-2.5 rounded bg-zinc-950/80 border border-white/10 space-y-1.5">
-                          <div className="font-semibold text-emerald-300">
-                            Astuce n°1 — Ne plus jamais avoir besoin de l'autre téléphone (Délégation YouTube Studio) :
-                          </div>
-                          <ol className="list-decimal list-inside space-y-1 text-zinc-300">
-                            <li>
-                              Sur l'ordinateur où <strong>YouTube Studio</strong> est ouvert (<code>studio.youtube.com</code>), cliquez sur <strong>Paramètres ⚙️ → Autorisations</strong> puis invitez <strong>votre propre adresse Google personnelle</strong> (celle de votre téléphone actuel) avec le rôle <strong>« Administrateur »</strong>.
-                            </li>
-                            <li>
-                              Créez votre <strong>ID Client OAuth 2.0 (Application Web)</strong> + <strong>Code Secret (`GOCSPX-...`)</strong> sur votre propre compte Google Cloud personnel en ajoutant l'Origine JavaScript autorisée :{' '}
-                              <code className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-amber-300 font-mono select-all">
-                                {typeof window !== 'undefined' ? window.location.origin : ''}
-                              </code>{' '}
-                              (et <code>https://goliathappli.github.io</code>).
-                            </li>
-                            <li>
-                              Cliquez sur <strong>« Connecter OAuth 2.0 Permanent »</strong> ci-dessous : connectez-vous avec <strong>votre propre compte personnel (sur votre téléphone !)</strong>, puis dans la liste qui s'affiche, <strong>cliquez sur la chaîne « La Vie au Saulchoir De Bruyelle »</strong> !
-                            </li>
-                          </ol>
-                        </div>
-                        <div className="p-2.5 rounded bg-zinc-950/80 border border-white/10">
-                          <span className="font-semibold text-amber-300">
-                            Astuce n°2 — Connexion 100% Permanente à vie (Plus jamais de reconnexion au bout d'1h) :
-                          </span>{' '}
-                          En renseignant à la fois l'<strong>ID Client OAuth</strong> ET le <strong>Code Secret (`GOCSPX-...`)</strong> ci-dessous, la connexion génère un <strong>Jeton d'Actualisation Permanent (`Refresh Token : 1//...`)</strong> chiffré dans GitHub. Même après fermeture du navigateur, la connexion ne s'arrête <strong>plus jamais</strong> et synchronise toutes vos vidéos non répertoriées 24h/24 !
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                        <div>
-                          <label className="block text-xs text-amber-200 font-semibold mb-1">
-                            1. ID Client OAuth 2.0 Google (Application Web)
-                          </label>
-                          <input
-                            type="text"
-                            value={config.youtubeOAuthClientId || ''}
-                            onChange={e =>
-                              updateAndPersistConfig({ youtubeOAuthClientId: e.target.value })
-                            }
-                            placeholder="xxxx-xxxx.apps.googleusercontent.com"
-                            className="w-full bg-zinc-950 border border-amber-500/40 rounded px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-400 font-mono"
-                          />
-                          <p className="text-[10px] text-zinc-400 mt-1">
-                            Remplace l'ancien ID supprimé (corrige l'erreur 401 <code>deleted_client</code>).
-                          </p>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs text-amber-200 font-semibold mb-1">
-                            2. Code Secret Client OAuth (Client Secret — Pour connexion permanente à vie)
-                          </label>
-                          <input
-                            type="password"
-                            value={config.youtubeClientSecret || ''}
-                            onChange={e =>
-                              updateAndPersistConfig({ youtubeClientSecret: e.target.value })
-                            }
-                            placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
-                            className="w-full bg-zinc-950 border border-amber-500/40 rounded px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-400 font-mono"
-                          />
-                          <p className="text-[10px] text-zinc-400 mt-1">
-                            Permet d'obtenir un <code>Refresh Token</code> illimité pour ne plus jamais se reconnecter.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-1">
-                        <label className="block text-xs text-zinc-300 font-medium mb-1">
-                          3. Jeton d'Actualisation Permanent (Refresh Token <code>1//0...</code> — généré automatiquement ou collable manuellement)
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-zinc-200 font-medium mb-1">
+                          1. ID Client OAuth 2.0 Google * (Mémorisé)
                         </label>
                         <input
                           type="text"
-                          value={config.youtubeRefreshToken || ''}
-                          onChange={e =>
-                            updateAndPersistConfig({ youtubeRefreshToken: e.target.value })
-                          }
-                          placeholder="Généré automatiquement lors de la connexion avec le Code Secret (ou collez un Refresh Token 1//0...)"
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-xs text-emerald-300 placeholder-zinc-600 focus:outline-none focus:border-emerald-400 font-mono"
+                          value={config.youtubeOAuthClientId || ''}
+                          onChange={e => updateConfigField({ youtubeOAuthClientId: e.target.value })}
+                          placeholder="Collez votre ID Client OAuth Google ici"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
                         />
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleConnectOAuthAndSync(false)}
-                          disabled={oauthConnecting || isSyncing || !config.youtubeOAuthClientId}
-                          className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-semibold text-xs rounded transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-red-950/50 disabled:opacity-50"
-                        >
-                          <Youtube className="w-4 h-4" />
-                          <span>
-                            {oauthConnecting
-                              ? 'Connexion OAuth 2.0 en cours...'
-                              : 'Connecter OAuth 2.0 Permanent & Choisir la Chaîne (Toutes les non répertoriées)'}
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleConnectOAuthAndSync(true)}
-                          disabled={oauthConnecting || isSyncing || !config.youtubeOAuthClientId}
-                          className="px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium text-xs rounded border border-zinc-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          title="Utilise la session Google/YouTube déjà ouverte sur ce navigateur sans redemander de validation par téléphone"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${oauthConnecting ? 'animate-spin' : ''}`} />
-                          <span>Connexion Silencieuse (Session déjà ouverte sans téléphone)</span>
-                        </button>
+                      <div>
+                        <label className="block text-xs text-zinc-200 font-medium mb-1">
+                          2. Code secret du client OAuth 2.0 (Pour connexion permanente 24h/24) *
+                        </label>
+                        <input
+                          type="password"
+                          value={config.youtubeClientSecret || ''}
+                          onChange={e => updateConfigField({ youtubeClientSecret: e.target.value })}
+                          placeholder="Collez votre Code secret client OAuth ici"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                        />
                       </div>
                     </div>
 
-                    {/* Complementary API Key & Playlist ID */}
-                    <div className="p-4 rounded-lg bg-zinc-950/60 border border-white/5 text-xs space-y-3">
-                      <div className="font-medium text-zinc-300">
-                        Paramètres complémentaires : Clé API de secours & ID de Playlist
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                      <div className="text-[11px] text-zinc-400 space-y-0.5">
+                        {config.youtubeRefreshToken ? (
+                          <div className="text-emerald-400 font-medium flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              Jeton OAuth permanent actif ({config.youtubeChannelTitle || 'Chaîne YouTube liée'}) — Plus besoin d'ouvrir le mode Admin quand vous publiez sur YouTube !
+                            </span>
+                          </div>
+                        ) : (
+                          <span>
+                            Renseignez l'ID Client et le Code secret du client une seule fois, puis cliquez sur le bouton ci-contre.
+                          </span>
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] text-zinc-400 font-medium mb-1">
-                            Clé API YouTube Data v3 (Complément / Secours)
-                          </label>
-                          <input
-                            type="text"
-                            value={config.youtubeApiKey || ''}
-                            onChange={e =>
-                              updateAndPersistConfig({ youtubeApiKey: e.target.value })
-                            }
-                            placeholder="AIzaSy..."
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
-                          />
-                        </div>
 
-                        <div>
-                          <label className="block text-[11px] text-zinc-400 font-medium mb-1">
-                            ID ou Lien de la Playlist / Chaîne
-                          </label>
-                          <input
-                            type="text"
-                            value={config.youtubePlaylistId || 'UUdOuEvwdKc0qr7_hxGF9_gA'}
-                            onChange={e =>
-                              updateAndPersistConfig({ youtubePlaylistId: e.target.value })
-                            }
-                            placeholder="UUdOuEvwdKc0qr7_hxGF9_gA"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
-                          />
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={handleConnectOAuthAndSync}
+                        disabled={oauthConnecting || isSyncing}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs rounded transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+                      >
+                        <Youtube className="w-4 h-4" />
+                        <span>
+                          {oauthConnecting
+                            ? 'Connexion Google en cours...'
+                            : config.youtubeRefreshToken
+                            ? 'Connexion OAuth Permanente Active (Resynchroniser)'
+                            : 'Activer la Connexion OAuth Permanente & Synchroniser'}
+                        </span>
+                      </button>
                     </div>
                   </div>
 
@@ -1231,7 +1121,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <input
                           type="password"
                           value={config.githubToken}
-                          onChange={e => updateAndPersistConfig({ githubToken: e.target.value })}
+                          onChange={e => updateConfigField({ githubToken: e.target.value })}
                           placeholder="ghp_..."
                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
                         />
@@ -1247,7 +1137,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <input
                           type="text"
                           value={config.githubOwner}
-                          onChange={e => setConfig({ ...config, githubOwner: e.target.value })}
+                          onChange={e => updateConfigField({ githubOwner: e.target.value })}
                           placeholder="atelier-cinema-saulchoir"
                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
                         />
@@ -1260,7 +1150,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <input
                           type="text"
                           value={config.githubRepo}
-                          onChange={e => setConfig({ ...config, githubRepo: e.target.value })}
+                          onChange={e => updateConfigField({ githubRepo: e.target.value })}
                           placeholder="cinema-catalog"
                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
                         />
@@ -1274,14 +1164,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <input
                             type="text"
                             value={config.githubBranch}
-                            onChange={e => setConfig({ ...config, githubBranch: e.target.value })}
+                            onChange={e => updateConfigField({ githubBranch: e.target.value })}
                             placeholder="main"
                             className="w-24 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200"
                           />
                           <input
                             type="text"
                             value={config.githubFilePath}
-                            onChange={e => setConfig({ ...config, githubFilePath: e.target.value })}
+                            onChange={e => updateConfigField({ githubFilePath: e.target.value })}
                             placeholder="data/videos.json"
                             className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200"
                           />
@@ -1394,16 +1284,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         value={config.autoSyncIntervalMinutes}
                         onChange={e => {
                           const val = Number(e.target.value);
-                          const upd = { ...config, autoSyncIntervalMinutes: val };
-                          setConfig(upd);
-                          storageService.saveConfig(upd);
+                          updateConfigField({ autoSyncIntervalMinutes: val });
                         }}
                         className="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200"
                       >
+                        <option value={2}>2 minutes</option>
+                        <option value={5}>5 minutes</option>
                         <option value={15}>15 minutes</option>
                         <option value={30}>30 minutes</option>
                         <option value={60}>1 heure</option>
-                        <option value={120}>2 heures</option>
                       </select>
 
                       <input
