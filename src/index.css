@@ -261,6 +261,36 @@
   animation: twinkleStar 2s ease-in-out infinite;
 }
 
+@keyframes seasonalParticleFall {
+  0% {
+    transform: translate3d(0, -8vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(18px, 50vh, 0) rotate(160deg);
+    opacity: 0.45;
+  }
+  88% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate3d(-14px, 106vh, 0) rotate(340deg);
+    opacity: 0;
+  }
+}
+
+.seasonal-particle {
+  position: absolute;
+  top: -5vh;
+  animation-name: seasonalParticleFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
 /* Subtle custom scrollbar for cinema aesthetics */
 ::-webkit-scrollbar {
   width: 7px;
