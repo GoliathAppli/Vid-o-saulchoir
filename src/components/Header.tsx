@@ -13,6 +13,9 @@ interface HeaderProps {
   onOpenAdmin: () => void;
   onOpenAbout: () => void;
   videoCount: number;
+  selectedThemeMode?: SeasonalThemeId | 'auto';
+  onThemeModeChange?: (mode: SeasonalThemeId | 'auto') => void;
+  activeThemeId?: SeasonalThemeId;
 }
 
 /**
@@ -301,9 +304,12 @@ const SeasonalDecorationSVG: React.FC<{ theme: SeasonalThemeId; side: 'left' | '
 export const Header: React.FC<HeaderProps> = ({
   isAdmin,
   onOpenAdmin,
+  selectedThemeMode: controlledMode,
+  onThemeModeChange,
+  activeThemeId: controlledActiveTheme,
 }) => {
   const [autoTheme, setAutoTheme] = useState<SeasonalThemeId>(() => getSeasonalTheme(new Date()));
-  const [selectedThemeMode, setSelectedThemeMode] = useState<SeasonalThemeId | 'auto'>(() => {
+  const [internalThemeMode, setInternalThemeMode] = useState<SeasonalThemeId | 'auto'>(() => {
     try {
       const saved = localStorage.getItem('saulchoir_seasonal_theme_mode');
       return (saved as SeasonalThemeId | 'auto') || 'auto';
@@ -311,6 +317,8 @@ export const Header: React.FC<HeaderProps> = ({
       return 'auto';
     }
   });
+
+  const selectedThemeMode = controlledMode !== undefined ? controlledMode : internalThemeMode;
 
   // Re-evaluate date periodically in case the page stays open across midnight
   useEffect(() => {
@@ -323,7 +331,10 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const handleThemeChange = (mode: SeasonalThemeId | 'auto') => {
-    setSelectedThemeMode(mode);
+    setInternalThemeMode(mode);
+    if (onThemeModeChange) {
+      onThemeModeChange(mode);
+    }
     try {
       localStorage.setItem('saulchoir_seasonal_theme_mode', mode);
     } catch {
@@ -332,7 +343,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const activeThemeId: SeasonalThemeId =
-    selectedThemeMode !== 'auto' ? selectedThemeMode : autoTheme;
+    controlledActiveTheme || (selectedThemeMode !== 'auto' ? selectedThemeMode : autoTheme);
   const activeTheme = SEASONAL_THEMES[activeThemeId] || SEASONAL_THEMES.default;
 
   return (
@@ -358,14 +369,14 @@ export const Header: React.FC<HeaderProps> = ({
             <SeasonalDecorationSVG theme={activeThemeId} side="right" />
           </div>
 
-          <span className="mt-1.5 w-24 sm:w-36 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+          <span className={`mt-1.5 w-24 sm:w-36 h-[1.5px] bg-gradient-to-r from-transparent ${activeTheme.dividerGradientClass} to-transparent`} />
         </a>
 
-        {/* Admin-only Seasonal Theme Selector (Auto by date + preview of all 7 holidays) */}
+        {/* Admin-only Seasonal Theme Selector (Auto by date + preview of all 7 holidays across the entire page) */}
         {isAdmin && (
           <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-zinc-300 bg-zinc-900/90 border border-amber-500/25 rounded-full px-3.5 py-1 shadow-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="text-zinc-400">Ambiance du titre :</span>
+            <span className="text-zinc-400">Thème de la page :</span>
             <select
               value={selectedThemeMode}
               onChange={e => handleThemeChange(e.target.value as SeasonalThemeId | 'auto')}
