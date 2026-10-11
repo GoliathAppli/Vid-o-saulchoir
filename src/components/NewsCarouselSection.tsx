@@ -4,9 +4,16 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { NewsPhoto, NewsCountdown } from '../types/cinema';
+import { NewsPhoto, NewsCountdown, SeasonalThemeId } from '../types/cinema';
+import { SEASONAL_THEMES } from '../utils/seasonalTheme';
 import {
-  Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon,
+  PopcornBucketIcon,
+  CinemaStageBackdrop,
+  CinemaMarqueeBulbs,
+  SeasonalFrameCorners,
+} from './CinemaDecorations';
+import {
+  Plus, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon,
   CheckCircle2, Loader2, AlertCircle, Clock, Timer, ChevronUp, RefreshCw, Cloud
 } from 'lucide-react';
 
@@ -16,6 +23,7 @@ interface NewsCarouselSectionProps {
   onUpdatePhotos: (updatedPhotos: NewsPhoto[]) => Promise<{ syncedToGitHub: boolean; error?: string }> | void;
   countdown: NewsCountdown;
   onUpdateCountdown: (updatedCountdown: NewsCountdown) => Promise<{ syncedToGitHub: boolean; error?: string }> | void;
+  seasonalTheme?: SeasonalThemeId;
 }
 
 /**
@@ -66,7 +74,9 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
   onUpdatePhotos,
   countdown,
   onUpdateCountdown,
+  seasonalTheme = 'default',
 }) => {
+  const themeInfo = SEASONAL_THEMES[seasonalTheme] || SEASONAL_THEMES.default;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [isAdminInteracting, setIsAdminInteracting] = useState(false);
@@ -369,17 +379,26 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
   };
 
   return (
-    <section id="actualite" className="relative pt-8 pb-12 sm:pb-16 border-b border-white/5">
+    <section
+      id="actualite"
+      className={`relative pt-8 pb-12 sm:pb-16 border-b ${themeInfo.sectionBorderClass}`}
+    >
+      {/* Background ambient cinema & seasonal glow */}
+      <div
+        className={`absolute top-1/3 left-1/2 -translate-x-1/2 w-4/5 max-w-4xl h-96 ${themeInfo.ambientGlowPrimary} blur-[130px] pointer-events-none -z-10 rounded-full`}
+      />
+
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
         
-        {/* Section Header: ACTUALITÉ */}
+        {/* Section Header: ACTUALITÉ with Popcorn Bucket Icons */}
         <div className="flex flex-col items-center text-center gap-2 mb-6">
-          <div className="inline-flex items-center gap-2 text-xs sm:text-sm font-cinzel font-bold tracking-[0.25em] uppercase text-amber-400">
-            <Sparkles className="w-4 h-4" />
+          <div
+            className={`inline-flex items-center gap-3 px-5 py-2 rounded-full bg-gradient-to-r ${themeInfo.badgeGradientClass} border text-xs sm:text-sm font-cinzel font-bold tracking-[0.25em] uppercase ${themeInfo.badgeTextClass}`}
+          >
+            <PopcornBucketIcon className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
             <span>Actualité</span>
-            <Sparkles className="w-4 h-4" />
+            <PopcornBucketIcon className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
           </div>
-          <div className="w-20 h-0.5 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
         </div>
 
         {/* Admin Controls to insert one or multiple photos */}
@@ -448,152 +467,166 @@ export const NewsCarouselSection: React.FC<NewsCarouselSectionProps> = ({
           </div>
         ) : (
           <div className="w-full space-y-4">
-            {/* Single Cohesive Cinema Showcase Card uniting the Poster and its Countdown */}
+            {/* Prestige Cinema Marquee Outer Frame */}
             <div
               onMouseEnter={() => isAdmin && setIsAdminInteracting(true)}
               onMouseLeave={() => isAdmin && setIsAdminInteracting(false)}
-              className={`relative w-full rounded-2xl overflow-hidden bg-zinc-950 transition-all duration-500 ${
-                remaining
-                  ? 'border-2 border-amber-400/50 shadow-[0_20px_60px_rgba(0,0,0,0.9),0_0_40px_rgba(245,158,11,0.18)]'
-                  : 'border border-white/15 shadow-2xl shadow-black/80'
-              }`}
+              className={`relative w-full p-2 sm:p-3 rounded-2xl bg-gradient-to-b ${themeInfo.frameGradientClass} border-2 ${themeInfo.frameBorderClass} transition-all duration-500`}
             >
-              {/* TOP PART: Fixed-size Large Poster Viewport (100% visible) */}
-              <div className="relative w-full h-[340px] sm:h-[500px] md:h-[600px] overflow-hidden bg-zinc-950 group">
-                {photos.map((photo, index) => {
-                  const isActive = index === safeIndex;
-                  return (
-                    <div
-                      key={photo.id}
-                      className={`absolute inset-0 w-full h-full flex items-center justify-center transition-opacity duration-700 ease-in-out ${
-                        isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-                      }`}
-                    >
-                      {/* Subtle blurred ambient background so the frame always looks full while the poster is 100% visible */}
-                      <img
-                        src={photo.url}
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-35 scale-110 pointer-events-none"
-                      />
-                      <img
-                        src={photo.url}
-                        alt={`Affiche événement ${index + 1}`}
-                        className="relative z-10 w-full h-full object-contain p-1 sm:p-2"
-                      />
-                    </div>
-                  );
-                })}
+              {/* Decorative Golden Cinema Corner Brackets */}
+              <span className={`pointer-events-none absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 ${themeInfo.frameCornerClass} rounded-tl-lg`} />
+              <span className={`pointer-events-none absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 ${themeInfo.frameCornerClass} rounded-tr-lg`} />
+              <span className={`pointer-events-none absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 ${themeInfo.frameCornerClass} rounded-bl-lg`} />
+              <span className={`pointer-events-none absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 ${themeInfo.frameCornerClass} rounded-br-lg`} />
 
-                {/* Left / Right Carousel Arrows when multiple posters exist */}
-                {photos.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={goPrev}
-                      aria-label="Affiche précédente"
-                      className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/65 hover:bg-amber-500 text-white hover:text-zinc-950 border border-white/15 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-lg"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={goNext}
-                      aria-label="Affiche suivante"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/65 hover:bg-amber-500 text-white hover:text-zinc-950 border border-white/15 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-lg"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </>
+              {/* Seasonal Holiday Corner Ornaments when active */}
+              <SeasonalFrameCorners theme={seasonalTheme} />
+
+              {/* Top Cinema Marquee Bulbs Rail */}
+              <CinemaMarqueeBulbs count={17} />
+
+              {/* Inner Theater Screen & Stage Container */}
+              <div className="relative w-full rounded-xl overflow-hidden bg-zinc-950 border border-amber-300/35 shadow-2xl shadow-black/95">
+                {/* TOP PART: Fixed-size Large Poster Viewport with Cinema Stage Backdrop */}
+                <div className="relative w-full h-[340px] sm:h-[500px] md:h-[600px] overflow-hidden bg-zinc-950 group">
+                  {photos.map((photo, index) => {
+                    const isActive = index === safeIndex;
+                    return (
+                      <div
+                        key={photo.id}
+                        className={`absolute inset-0 w-full h-full flex items-center justify-center transition-opacity duration-700 ease-in-out ${
+                          isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                        }`}
+                      >
+                        {/* Authentic Cinema Theater Stage Backdrop (Red Velvet Curtains, 35mm Film Sprockets, Projector Spotlight, Stage Footlights) visible whenever an image is smaller than the frame */}
+                        <CinemaStageBackdrop
+                          photoUrl={photo.url}
+                          seasonalTheme={seasonalTheme}
+                        />
+
+                        {/* Main Poster / Image centered on the Cinema Stage */}
+                        <img
+                          src={photo.url}
+                          alt={`Affiche événement ${index + 1}`}
+                          className="relative z-10 max-w-full max-h-full w-auto h-full object-contain py-3 px-4 sm:py-5 sm:px-10 drop-shadow-[0_18px_45px_rgba(0,0,0,0.95)]"
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {/* Left / Right Carousel Arrows when multiple posters exist */}
+                  {photos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={goPrev}
+                        aria-label="Affiche précédente"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/75 hover:bg-amber-500 text-amber-200 hover:text-zinc-950 border border-amber-400/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-lg"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        aria-label="Affiche suivante"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/75 hover:bg-amber-500 text-amber-200 hover:text-zinc-950 border border-amber-400/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-lg"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* BOTTOM PART: Integrated Poster Countdown Pedestal (Directly fused to the poster above) */}
+                {remaining && activePhoto && (
+                  <div className="relative overflow-hidden border-t-2 border-amber-400/50 bg-zinc-950">
+                    {/* Ambient color reflection from the current poster above so the countdown visually belongs to the poster */}
+                    <img
+                      src={activePhoto.url}
+                      alt=""
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 w-full h-full object-cover blur-3xl opacity-25 scale-125"
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-zinc-950/80 via-zinc-950/90 to-zinc-950/95" />
+
+                    {/* Luminous golden seam & visual pointer linking the countdown to the poster above */}
+                    <div className="relative z-10 flex flex-col items-center">
+                      <div className="inline-flex items-center gap-1.5 px-3.5 py-0.5 rounded-b-lg bg-amber-500/20 border-x border-b border-amber-400/40 text-amber-300 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] shadow-sm">
+                        <ChevronUp className="w-3.5 h-3.5 text-amber-400 -mt-0.5 animate-bounce" />
+                        <span>Événement à l'affiche</span>
+                        {photos.length > 1 && (
+                          <span className="text-amber-400/80 ml-1">
+                            ({safeIndex + 1}/{photos.length})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Main Countdown Content Bar (Centered, without redundant date text since it is on the poster) */}
+                    <div className="relative z-10 px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-center">
+                      <div className="flex items-center justify-center">
+                        {remaining.isPast ? (
+                          <div className="px-5 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50">
+                            <span className="font-cinzel text-lg sm:text-2xl font-bold text-amber-300 tracking-wider uppercase drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]">
+                              🎬 L'événement a commencé !
+                            </span>
+                          </div>
+                        ) : remaining.mode === 'days' ? (
+                          remaining.isToday ? (
+                            <div className="px-6 py-3 rounded-xl bg-amber-500/20 border-2 border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
+                              <span className="font-cinzel text-xl sm:text-3xl font-extrabold text-amber-200 tracking-wider uppercase drop-shadow-[0_0_12px_rgba(251,191,36,0.5)]">
+                                🎬 C'est aujourd'hui !
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center gap-3.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.28)]">
+                              <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-widest text-amber-400/90">
+                                Dans
+                              </span>
+                              <span className="font-cinzel text-3xl sm:text-5xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_12px_rgba(251,191,36,0.55)]">
+                                {remaining.days}
+                              </span>
+                              <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-[0.18em] text-amber-300 text-center">
+                                {remaining.days > 1 ? 'Jours' : 'Jour'}
+                              </span>
+                            </div>
+                          )
+                        ) : (
+                          /* Mode 'days_hours': Jours + Heures */
+                          <div className="flex items-center gap-2.5 sm:gap-3.5">
+                            {/* Days block */}
+                            <div className="min-w-[90px] sm:min-w-[115px] px-3.5 sm:px-5 py-2.5 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_22px_rgba(245,158,11,0.25)] flex flex-col items-center justify-center">
+                              <span className="font-cinzel text-2xl sm:text-4xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_10px_rgba(251,191,36,0.5)]">
+                                {remaining.days}
+                              </span>
+                              <span className="mt-1 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] text-amber-400">
+                                {remaining.days > 1 ? 'Jours' : 'Jour'}
+                              </span>
+                            </div>
+
+                            <span className="font-cinzel text-2xl sm:text-3xl font-bold text-amber-400 animate-pulse">
+                              :
+                            </span>
+
+                            {/* Hours block */}
+                            <div className="min-w-[90px] sm:min-w-[115px] px-3.5 sm:px-5 py-2.5 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_22px_rgba(245,158,11,0.25)] flex flex-col items-center justify-center">
+                              <span className="font-cinzel text-2xl sm:text-4xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_10px_rgba(251,191,36,0.5)]">
+                                {String(remaining.hours).padStart(2, '0')}
+                              </span>
+                              <span className="mt-1 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] text-amber-400">
+                                {remaining.hours > 1 ? 'Heures' : 'Heure'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* BOTTOM PART: Integrated Poster Countdown Pedestal (Directly fused to the poster above) */}
-              {remaining && activePhoto && (
-                <div className="relative overflow-hidden border-t-2 border-amber-400/50 bg-zinc-950">
-                  {/* Ambient color reflection from the current poster above so the countdown visually belongs to the poster */}
-                  <img
-                    src={activePhoto.url}
-                    alt=""
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 w-full h-full object-cover blur-3xl opacity-25 scale-125"
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-zinc-950/80 via-zinc-950/90 to-zinc-950/95" />
-
-                  {/* Luminous golden seam & visual pointer linking the countdown to the poster above */}
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div className="inline-flex items-center gap-1.5 px-3.5 py-0.5 rounded-b-lg bg-amber-500/20 border-x border-b border-amber-400/40 text-amber-300 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] shadow-sm">
-                      <ChevronUp className="w-3.5 h-3.5 text-amber-400 -mt-0.5 animate-bounce" />
-                      <span>Événement à l'affiche</span>
-                      {photos.length > 1 && (
-                        <span className="text-amber-400/80 ml-1">
-                          ({safeIndex + 1}/{photos.length})
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Main Countdown Content Bar (Centered, without redundant date text since it is on the poster) */}
-                  <div className="relative z-10 px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-center">
-                    <div className="flex items-center justify-center">
-                      {remaining.isPast ? (
-                        <div className="px-5 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50">
-                          <span className="font-cinzel text-lg sm:text-2xl font-bold text-amber-300 tracking-wider uppercase drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]">
-                            🎬 L'événement a commencé !
-                          </span>
-                        </div>
-                      ) : remaining.mode === 'days' ? (
-                        remaining.isToday ? (
-                          <div className="px-6 py-3 rounded-xl bg-amber-500/20 border-2 border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
-                            <span className="font-cinzel text-xl sm:text-3xl font-extrabold text-amber-200 tracking-wider uppercase drop-shadow-[0_0_12px_rgba(251,191,36,0.5)]">
-                              🎬 C'est aujourd'hui !
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-3.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.28)]">
-                            <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-widest text-amber-400/90">
-                              Dans
-                            </span>
-                            <span className="font-cinzel text-3xl sm:text-5xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_12px_rgba(251,191,36,0.55)]">
-                              {remaining.days}
-                            </span>
-                            <span className="font-cinzel text-xs sm:text-sm font-bold uppercase tracking-[0.18em] text-amber-300 text-center">
-                              {remaining.days > 1 ? 'Jours' : 'Jour'}
-                            </span>
-                          </div>
-                        )
-                      ) : (
-                        /* Mode 'days_hours': Jours + Heures */
-                        <div className="flex items-center gap-2.5 sm:gap-3.5">
-                          {/* Days block */}
-                          <div className="min-w-[90px] sm:min-w-[115px] px-3.5 sm:px-5 py-2.5 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_22px_rgba(245,158,11,0.25)] flex flex-col items-center justify-center">
-                            <span className="font-cinzel text-2xl sm:text-4xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_10px_rgba(251,191,36,0.5)]">
-                              {remaining.days}
-                            </span>
-                            <span className="mt-1 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] text-amber-400">
-                              {remaining.days > 1 ? 'Jours' : 'Jour'}
-                            </span>
-                          </div>
-
-                          <span className="font-cinzel text-2xl sm:text-3xl font-bold text-amber-400 animate-pulse">
-                            :
-                          </span>
-
-                          {/* Hours block */}
-                          <div className="min-w-[90px] sm:min-w-[115px] px-3.5 sm:px-5 py-2.5 rounded-xl bg-gradient-to-b from-amber-500/25 via-zinc-900/95 to-zinc-950 border-2 border-amber-400/80 shadow-[0_0_22px_rgba(245,158,11,0.25)] flex flex-col items-center justify-center">
-                            <span className="font-cinzel text-2xl sm:text-4xl font-extrabold text-amber-200 tracking-tight leading-none drop-shadow-[0_2px_10px_rgba(251,191,36,0.5)]">
-                              {String(remaining.hours).padStart(2, '0')}
-                            </span>
-                            <span className="mt-1 text-[10px] sm:text-[11px] font-cinzel font-bold uppercase tracking-[0.2em] text-amber-400">
-                              {remaining.hours > 1 ? 'Heures' : 'Heure'}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Bottom Cinema Marquee Bulbs Rail */}
+              <CinemaMarqueeBulbs count={17} />
             </div>
 
             {/* Admin Thumbnail Strip to select which poster to configure or delete */}
