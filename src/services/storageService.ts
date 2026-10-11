@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, NewsCountdown, PersistedSyncSettings, normalizeVideoCategory } from '../types/cinema';
+import { VideoItem, SyncConfig, SyncLogEntry, YearGroup, MonthGroup, NewsPhoto, NewsCountdown, normalizeVideoCategory } from '../types/cinema';
 import bundledVideosData from '../../data/videos.json';
 import bundledNewsPhotosData from '../../data/news_photos.json';
 import bundledNewsCountdownData from '../../data/news_countdown.json';
-import bundledSyncSettingsData from '../../data/sync_settings.json';
+import bundledSyncVaultData from '../../data/sync_vault.json';
+import { decryptVaultPayload } from './githubService';
 
 const STORAGE_KEYS = {
   LEGACY_VIDEOS: 'atelier_cinema_videos_catalog',
@@ -18,59 +19,6 @@ const STORAGE_KEYS = {
   LOGS: 'atelier_cinema_sync_logs',
   ADMIN_SESSION: 'atelier_cinema_admin_auth',
 };
-
-const VAULT_SECRET = 'Saulchoir_Atelier_Cinema_25091993_PermanentSyncKey';
-
-interface VaultPayload {
-  youtubeOAuthClientId?: string;
-  youtubeClientSecret?: string;
-  youtubeRefreshToken?: string;
-  youtubeAccessToken?: string;
-  youtubeTokenExpiry?: number;
-  youtubeUserEmail?: string;
-  youtubeApiKey?: string;
-  githubToken?: string;
-}
-
-function encodeVault(payload: VaultPayload): string {
-  try {
-    const json = JSON.stringify(payload);
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(json);
-    const keyBytes = encoder.encode(VAULT_SECRET);
-    const out = new Uint8Array(dataBytes.length);
-    for (let i = 0; i < dataBytes.length; i++) {
-      out[i] = (dataBytes[i] ^ keyBytes[i % keyBytes.length] ^ ((i * 31) & 0xff)) & 0xff;
-    }
-    let hex = '';
-    for (let i = 0; i < out.length; i++) {
-      hex += out[i].toString(16).padStart(2, '0');
-    }
-    return 'acs1_' + hex;
-  } catch {
-    return '';
-  }
-}
-
-function decodeVault(encoded?: string): VaultPayload | null {
-  try {
-    if (!encoded || !encoded.startsWith('acs1_')) return null;
-    const hex = encoded.slice(5);
-    if (!hex || hex.length % 2 !== 0) return null;
-    const encoder = new TextEncoder();
-    const keyBytes = encoder.encode(VAULT_SECRET);
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      const byteVal = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-      bytes[i] = (byteVal ^ keyBytes[i % keyBytes.length] ^ ((i * 31) & 0xff)) & 0xff;
-    }
-    const decoder = new TextDecoder('utf-8');
-    const json = decoder.decode(bytes);
-    return JSON.parse(json) as VaultPayload;
-  } catch {
-    return null;
-  }
-}
 
 const DEFAULT_COUNTDOWN: NewsCountdown = {
   enabled: false,
@@ -85,21 +33,21 @@ const DEFAULT_CONFIG: SyncConfig = {
   youtubeClientSecret: '',
   youtubeRefreshToken: '',
   youtubeAccessToken: '',
-  youtubeTokenExpiry: undefined,
-  youtubeUserEmail: '',
+  youtubeTokenExpiresAt: undefined,
+  youtubeChannelTitle: '',
   youtubeApiKey: '',
-  youtubePlaylistId: 'UUdOuEvwdKc0qr7_hxGF9_gA',
-  youtubeChannelId: 'UCdOuEvwdKc0qr7_hxGF9_gA',
+  youtubePlaylistId: '',
+  youtubeChannelId: '',
   githubToken: '',
   githubOwner: 'goliathappli',
   githubRepo: 'Vid-o-saulchoir',
   githubBranch: 'main',
   githubFilePath: 'data/videos.json',
   autoSyncEnabled: true,
-  autoSyncIntervalMinutes: 2,
+  autoSyncIntervalMinutes: 5,
   lastSyncTimestamp: undefined,
   lastSyncStatus: 'idle',
-  lastSyncMessage: 'Synchronisation permanente prête.',
+  lastSyncMessage: 'En attente de la connexion OAuth 2.0 YouTube permanente.',
 };
 
 const FRENCH_MONTHS = [
@@ -232,234 +180,79 @@ export const storageService = {
   },
 
   getConfig(): SyncConfig {
+    let baseConfig: SyncConfig = { ...DEFAULT_CONFIG };
+
     try {
-      const bundledSettings = (bundledSyncSettingsData || {}) as PersistedSyncSettings;
-      const bundledVault = decodeVault(bundledSettings.encryptedVault) || {};
+      if (
+        bundledSyncVaultData &&
+        typeof bundledSyncVaultData === 'object' &&
+        typeof (bundledSyncVaultData as { vault?: string }).vault === 'string' &&
+        (bundledSyncVaultData as { vault?: string }).vault
+      ) {
+        const decrypted = decryptVaultPayload((bundledSyncVaultData as { vault: string }).vault);
+        if (decrypted) {
+          baseConfig = {
+            ...baseConfig,
+            ...decrypted,
+          };
+        }
+      }
+    } catch {
+      // ignore bundled vault parse errors
+    }
 
-      const baseConfig: SyncConfig = {
-        ...DEFAULT_CONFIG,
-        youtubeOAuthClientId:
-          bundledVault.youtubeOAuthClientId ||
-          bundledSettings.youtubeOAuthClientId ||
-          DEFAULT_CONFIG.youtubeOAuthClientId,
-        youtubeClientSecret:
-          bundledVault.youtubeClientSecret || DEFAULT_CONFIG.youtubeClientSecret,
-        youtubeRefreshToken:
-          bundledVault.youtubeRefreshToken || DEFAULT_CONFIG.youtubeRefreshToken,
-        youtubeAccessToken:
-          bundledVault.youtubeAccessToken || DEFAULT_CONFIG.youtubeAccessToken,
-        youtubeTokenExpiry:
-          bundledVault.youtubeTokenExpiry || DEFAULT_CONFIG.youtubeTokenExpiry,
-        youtubeUserEmail:
-          bundledVault.youtubeUserEmail ||
-          bundledSettings.youtubeUserEmail ||
-          DEFAULT_CONFIG.youtubeUserEmail,
-        youtubeApiKey: bundledVault.youtubeApiKey || DEFAULT_CONFIG.youtubeApiKey,
-        youtubePlaylistId:
-          bundledSettings.youtubePlaylistId || DEFAULT_CONFIG.youtubePlaylistId,
-        youtubeChannelId:
-          bundledSettings.youtubeChannelId || DEFAULT_CONFIG.youtubeChannelId,
-        githubToken: bundledVault.githubToken || DEFAULT_CONFIG.githubToken,
-        githubOwner: bundledSettings.githubOwner || DEFAULT_CONFIG.githubOwner,
-        githubRepo: bundledSettings.githubRepo || DEFAULT_CONFIG.githubRepo,
-      };
-
+    try {
       const stored = localStorage.getItem(STORAGE_KEYS.CONFIG);
       if (stored) {
-        const parsed = JSON.parse(stored) as Partial<SyncConfig>;
+        const parsed = JSON.parse(stored);
         return {
           ...baseConfig,
           ...parsed,
-          youtubeOAuthClientId:
-            parsed.youtubeOAuthClientId || baseConfig.youtubeOAuthClientId || '',
-          youtubeClientSecret:
-            parsed.youtubeClientSecret || baseConfig.youtubeClientSecret || '',
-          youtubeRefreshToken:
-            parsed.youtubeRefreshToken || baseConfig.youtubeRefreshToken || '',
-          youtubeAccessToken:
-            parsed.youtubeAccessToken || baseConfig.youtubeAccessToken || '',
-          youtubeTokenExpiry:
-            parsed.youtubeTokenExpiry || baseConfig.youtubeTokenExpiry,
-          youtubeUserEmail:
-            parsed.youtubeUserEmail || baseConfig.youtubeUserEmail || '',
-          youtubeApiKey: parsed.youtubeApiKey || baseConfig.youtubeApiKey || '',
-          youtubePlaylistId:
-            parsed.youtubePlaylistId || baseConfig.youtubePlaylistId,
-          youtubeChannelId:
-            parsed.youtubeChannelId || baseConfig.youtubeChannelId,
+          youtubeOAuthClientId: parsed.youtubeOAuthClientId || baseConfig.youtubeOAuthClientId || '',
+          youtubeClientSecret: parsed.youtubeClientSecret || baseConfig.youtubeClientSecret || '',
+          youtubeRefreshToken: parsed.youtubeRefreshToken || baseConfig.youtubeRefreshToken || '',
+          youtubeAccessToken: parsed.youtubeAccessToken || baseConfig.youtubeAccessToken || '',
+          youtubeTokenExpiresAt: parsed.youtubeTokenExpiresAt || baseConfig.youtubeTokenExpiresAt,
+          youtubeChannelTitle: parsed.youtubeChannelTitle || baseConfig.youtubeChannelTitle || '',
+          youtubePlaylistId: parsed.youtubePlaylistId || baseConfig.youtubePlaylistId || '',
           githubToken: parsed.githubToken || baseConfig.githubToken || '',
-          githubOwner: parsed.githubOwner || baseConfig.githubOwner,
-          githubRepo: parsed.githubRepo || baseConfig.githubRepo,
-          autoSyncIntervalMinutes: parsed.autoSyncIntervalMinutes || 2,
+          githubOwner: parsed.githubOwner || baseConfig.githubOwner || DEFAULT_CONFIG.githubOwner,
+          githubRepo: parsed.githubRepo || baseConfig.githubRepo || DEFAULT_CONFIG.githubRepo,
         };
       }
-      return baseConfig;
     } catch (e) {
       console.error('Erreur lecture config', e);
     }
-    return DEFAULT_CONFIG;
+    return baseConfig;
   },
 
   saveConfig(config: SyncConfig): void {
     try {
-      const existing = this.getConfig();
-      const merged: SyncConfig = {
-        ...existing,
-        ...config,
-        youtubeOAuthClientId:
-          config.youtubeOAuthClientId !== undefined
-            ? config.youtubeOAuthClientId.trim()
-            : existing.youtubeOAuthClientId || '',
-        youtubeClientSecret:
-          config.youtubeClientSecret !== undefined
-            ? config.youtubeClientSecret.trim()
-            : existing.youtubeClientSecret || '',
-        youtubeRefreshToken:
-          config.youtubeRefreshToken !== undefined
-            ? config.youtubeRefreshToken.trim()
-            : existing.youtubeRefreshToken || '',
-        youtubeAccessToken:
-          config.youtubeAccessToken !== undefined
-            ? config.youtubeAccessToken.trim()
-            : existing.youtubeAccessToken || '',
-        youtubeTokenExpiry:
-          config.youtubeTokenExpiry !== undefined
-            ? config.youtubeTokenExpiry
-            : existing.youtubeTokenExpiry,
-        youtubeUserEmail:
-          config.youtubeUserEmail !== undefined
-            ? config.youtubeUserEmail.trim()
-            : existing.youtubeUserEmail || '',
-        youtubeApiKey:
-          config.youtubeApiKey !== undefined
-            ? config.youtubeApiKey.trim()
-            : existing.youtubeApiKey || '',
-        githubToken:
-          config.githubToken !== undefined && config.githubToken !== ''
-            ? config.githubToken.trim()
-            : existing.githubToken || '',
-        youtubePlaylistId:
-          config.youtubePlaylistId || existing.youtubePlaylistId || DEFAULT_CONFIG.youtubePlaylistId,
-        youtubeChannelId:
-          config.youtubeChannelId || existing.youtubeChannelId || DEFAULT_CONFIG.youtubeChannelId,
-        githubOwner: config.githubOwner || existing.githubOwner || DEFAULT_CONFIG.githubOwner,
-        githubRepo: config.githubRepo || existing.githubRepo || DEFAULT_CONFIG.githubRepo,
-      };
-      if (merged.youtubeOAuthClientId) {
-        localStorage.removeItem('atelier_cinema_oauth_cleared');
-      }
-      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(merged));
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
     } catch (e) {
       console.error('Erreur sauvegarde config', e);
     }
   },
 
-  clearOAuthCredentials(): SyncConfig {
-    const existing = this.getConfig();
-    const cleaned: SyncConfig = {
-      ...existing,
-      youtubeOAuthClientId: '',
-      youtubeClientSecret: '',
-      youtubeRefreshToken: '',
-      youtubeAccessToken: '',
-      youtubeTokenExpiry: undefined,
-      youtubeUserEmail: '',
-    };
-    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cleaned));
-    localStorage.setItem('atelier_cinema_oauth_cleared', 'true');
-    return cleaned;
-  },
-
-  encodeSyncSettings(config: SyncConfig): PersistedSyncSettings {
-    const encryptedVault = encodeVault({
-      youtubeOAuthClientId: config.youtubeOAuthClientId || '',
-      youtubeClientSecret: config.youtubeClientSecret || '',
-      youtubeRefreshToken: config.youtubeRefreshToken || '',
-      youtubeAccessToken: config.youtubeAccessToken || '',
-      youtubeTokenExpiry: config.youtubeTokenExpiry,
-      youtubeUserEmail: config.youtubeUserEmail || '',
-      youtubeApiKey: config.youtubeApiKey || '',
-      githubToken: config.githubToken || '',
-    });
-
-    return {
-      youtubeOAuthClientId: config.youtubeOAuthClientId || '',
-      youtubeChannelId: config.youtubeChannelId || 'UCdOuEvwdKc0qr7_hxGF9_gA',
-      youtubePlaylistId: config.youtubePlaylistId || 'UUdOuEvwdKc0qr7_hxGF9_gA',
-      youtubeUserEmail: config.youtubeUserEmail || '',
-      githubOwner: config.githubOwner || 'goliathappli',
-      githubRepo: config.githubRepo || 'Vid-o-saulchoir',
-      githubBranch: config.githubBranch || 'main',
-      githubFilePath: config.githubFilePath || 'data/videos.json',
-      autoSyncEnabled: true,
-      autoSyncIntervalMinutes: config.autoSyncIntervalMinutes || 2,
-      updatedAt: new Date().toISOString(),
-      encryptedVault,
-    };
-  },
-
-  mergeRemoteSyncSettings(remote: PersistedSyncSettings | null): SyncConfig {
-    const local = this.getConfig();
-    if (!remote) return local;
-
-    const oauthCleared = localStorage.getItem('atelier_cinema_oauth_cleared') === 'true';
-    const vault = decodeVault(remote.encryptedVault) || {};
-
-    // Prefer whichever access token expires later (unless OAuth was explicitly cleared)
-    let bestAccessToken = oauthCleared ? '' : (local.youtubeAccessToken || vault.youtubeAccessToken || '');
-    let bestTokenExpiry = oauthCleared ? undefined : (local.youtubeTokenExpiry || vault.youtubeTokenExpiry);
-    if (
-      !oauthCleared &&
-      vault.youtubeAccessToken &&
-      vault.youtubeTokenExpiry &&
-      (!local.youtubeTokenExpiry || vault.youtubeTokenExpiry > local.youtubeTokenExpiry)
-    ) {
-      bestAccessToken = vault.youtubeAccessToken;
-      bestTokenExpiry = vault.youtubeTokenExpiry;
-    }
-
+  mergeRemoteVault(remoteVault: Partial<SyncConfig>): SyncConfig {
+    const current = this.getConfig();
     const merged: SyncConfig = {
-      ...local,
-      youtubeOAuthClientId: oauthCleared
-        ? (local.youtubeOAuthClientId || '')
-        : (local.youtubeOAuthClientId ||
-            vault.youtubeOAuthClientId ||
-            remote.youtubeOAuthClientId ||
-            ''),
-      youtubeClientSecret: oauthCleared
-        ? (local.youtubeClientSecret || '')
-        : (local.youtubeClientSecret || vault.youtubeClientSecret || ''),
-      youtubeRefreshToken: oauthCleared
-        ? (local.youtubeRefreshToken || '')
-        : (local.youtubeRefreshToken || vault.youtubeRefreshToken || ''),
-      youtubeAccessToken: bestAccessToken,
-      youtubeTokenExpiry: bestTokenExpiry,
-      youtubeUserEmail: oauthCleared
-        ? (local.youtubeUserEmail || '')
-        : (local.youtubeUserEmail ||
-            vault.youtubeUserEmail ||
-            remote.youtubeUserEmail ||
-            ''),
-      youtubeApiKey: local.youtubeApiKey || vault.youtubeApiKey || '',
-      youtubePlaylistId:
-        local.youtubePlaylistId ||
-        remote.youtubePlaylistId ||
-        'UUdOuEvwdKc0qr7_hxGF9_gA',
-      youtubeChannelId:
-        local.youtubeChannelId ||
-        remote.youtubeChannelId ||
-        'UCdOuEvwdKc0qr7_hxGF9_gA',
-      githubToken: local.githubToken || vault.githubToken || '',
-      githubOwner: local.githubOwner || remote.githubOwner || 'goliathappli',
-      githubRepo: local.githubRepo || remote.githubRepo || 'Vid-o-saulchoir',
-      githubBranch: local.githubBranch || remote.githubBranch || 'main',
-      githubFilePath:
-        local.githubFilePath || remote.githubFilePath || 'data/videos.json',
+      ...current,
+      youtubeOAuthClientId: current.youtubeOAuthClientId || remoteVault.youtubeOAuthClientId || '',
+      youtubeClientSecret: current.youtubeClientSecret || remoteVault.youtubeClientSecret || '',
+      youtubeRefreshToken: current.youtubeRefreshToken || remoteVault.youtubeRefreshToken || '',
+      youtubeAccessToken: current.youtubeAccessToken || remoteVault.youtubeAccessToken || '',
+      youtubeTokenExpiresAt: current.youtubeTokenExpiresAt || remoteVault.youtubeTokenExpiresAt,
+      youtubeChannelTitle: current.youtubeChannelTitle || remoteVault.youtubeChannelTitle || '',
+      youtubePlaylistId: current.youtubePlaylistId || remoteVault.youtubePlaylistId || '',
+      youtubeChannelId: current.youtubeChannelId || remoteVault.youtubeChannelId || '',
+      githubToken: current.githubToken || remoteVault.githubToken || '',
+      githubOwner: current.githubOwner || remoteVault.githubOwner || DEFAULT_CONFIG.githubOwner,
+      githubRepo: current.githubRepo || remoteVault.githubRepo || DEFAULT_CONFIG.githubRepo,
+      githubBranch: current.githubBranch || remoteVault.githubBranch || DEFAULT_CONFIG.githubBranch,
+      githubFilePath: current.githubFilePath || remoteVault.githubFilePath || DEFAULT_CONFIG.githubFilePath,
       autoSyncEnabled: true,
-      autoSyncIntervalMinutes:
-        local.autoSyncIntervalMinutes || remote.autoSyncIntervalMinutes || 2,
     };
-
     this.saveConfig(merged);
     return merged;
   },
@@ -581,7 +374,7 @@ export const storageService = {
     return { latest, archives };
   },
 
-  // Admin authentication check (persisted in localStorage so connection stays permanent)
+  // Admin authentication check (permanent in localStorage until explicit logout)
   isAdminAuthenticated(): boolean {
     try {
       return (
