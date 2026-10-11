@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { VideoItem } from '../types/cinema';
-import { Play, Film, Sparkles } from 'lucide-react';
+import { VideoItem, SeasonalThemeId } from '../types/cinema';
+import { SEASONAL_THEMES } from '../utils/seasonalTheme';
+import { PopcornBucketIcon, SeasonalFrameCorners } from './CinemaDecorations';
+import { Play, Film } from 'lucide-react';
 
 interface HeroFeaturedVideoProps {
   video: VideoItem | null;
@@ -13,13 +15,16 @@ interface HeroFeaturedVideoProps {
   isAdmin: boolean;
   onEditVideo?: (video: VideoItem) => void;
   onOpenAdmin?: () => void;
+  seasonalTheme?: SeasonalThemeId;
 }
 
 export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
   video,
   onOpenAdmin,
+  seasonalTheme = 'default',
 }) => {
   const [isPlayingInline, setIsPlayingInline] = useState(false);
+  const themeInfo = SEASONAL_THEMES[seasonalTheme] || SEASONAL_THEMES.default;
 
   // Reset inline player if the featured video changes
   useEffect(() => {
@@ -28,15 +33,17 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
 
   if (!video) {
     return (
-      <section id="nouvelle-publication" className="py-24 border-b border-white/5">
+      <section id="nouvelle-publication" className={`py-24 border-b ${themeInfo.sectionBorderClass}`}>
         <div className="max-w-2xl mx-auto px-4 text-center space-y-5">
           <div className="w-14 h-14 mx-auto rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-amber-400/80">
             <Film className="w-6 h-6" />
           </div>
           <div className="space-y-2">
-            <span className="text-xs uppercase tracking-widest text-amber-400/90 font-semibold">
-              Nouvelle publication
-            </span>
+            <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-amber-400/90 font-semibold">
+              <PopcornBucketIcon className="w-5 h-5" />
+              <span>Nouvelle publication</span>
+              <PopcornBucketIcon className="w-5 h-5" />
+            </div>
             <h1 className="font-serif-cinema text-3xl text-zinc-100 font-semibold">
               En attente de synchronisation YouTube
             </h1>
@@ -60,28 +67,40 @@ export const HeroFeaturedVideo: React.FC<HeroFeaturedVideoProps> = ({
   }
 
   return (
-    <section id="nouvelle-publication" className="relative pt-10 pb-16 sm:pb-20 border-b border-amber-500/15">
-      {/* Background ambient cinema glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-4/5 max-w-4xl h-96 bg-amber-500/12 blur-[130px] pointer-events-none -z-10 rounded-full" />
+    <section
+      id="nouvelle-publication"
+      className={`relative pt-10 pb-16 sm:pb-20 border-b ${themeInfo.sectionBorderClass}`}
+    >
+      {/* Background ambient cinema & seasonal glow */}
+      <div
+        className={`absolute top-1/3 left-1/2 -translate-x-1/2 w-4/5 max-w-4xl h-96 ${themeInfo.ambientGlowPrimary} blur-[130px] pointer-events-none -z-10 rounded-full`}
+      />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
         
-        {/* Highlighted Section Header Badge */}
+        {/* Highlighted Section Header Badge with Popcorn Bucket Icons */}
         <div className="flex flex-col items-center text-center gap-2 mb-7">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border border-amber-400/60 shadow-[0_0_25px_rgba(245,158,11,0.3)] text-xs sm:text-sm font-cinzel font-bold tracking-[0.25em] uppercase text-amber-300">
-            <Sparkles className="w-4 h-4 text-amber-300" />
+          <div
+            className={`inline-flex items-center gap-3 px-5 py-2 rounded-full bg-gradient-to-r ${themeInfo.badgeGradientClass} border text-xs sm:text-sm font-cinzel font-bold tracking-[0.25em] uppercase ${themeInfo.badgeTextClass}`}
+          >
+            <PopcornBucketIcon className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
             <span>Nouvelle Publication</span>
-            <Sparkles className="w-4 h-4 text-amber-300" />
+            <PopcornBucketIcon className="w-5 h-5 sm:w-6 sm:h-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
           </div>
         </div>
 
-        {/* Highlighted Prestige Golden Cinema Frame */}
-        <div className="w-full p-2 sm:p-3 rounded-2xl bg-gradient-to-b from-amber-400/35 via-amber-500/15 to-amber-400/35 border-2 border-amber-400/70 shadow-[0_0_55px_rgba(245,158,11,0.28)] relative">
-          {/* Decorative Golden Corner Accents */}
-          <span className="pointer-events-none absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-amber-300 rounded-tl-lg" />
-          <span className="pointer-events-none absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-amber-300 rounded-tr-lg" />
-          <span className="pointer-events-none absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-amber-300 rounded-bl-lg" />
-          <span className="pointer-events-none absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-amber-300 rounded-br-lg" />
+        {/* Highlighted Prestige Cinema Frame with Seasonal Accent & Ornaments */}
+        <div
+          className={`w-full p-2 sm:p-3 rounded-2xl bg-gradient-to-b ${themeInfo.frameGradientClass} border-2 ${themeInfo.frameBorderClass} relative`}
+        >
+          {/* Decorative Corner Accents */}
+          <span className={`pointer-events-none absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 ${themeInfo.frameCornerClass} rounded-tl-lg`} />
+          <span className={`pointer-events-none absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 ${themeInfo.frameCornerClass} rounded-tr-lg`} />
+          <span className={`pointer-events-none absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 ${themeInfo.frameCornerClass} rounded-bl-lg`} />
+          <span className={`pointer-events-none absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 ${themeInfo.frameCornerClass} rounded-br-lg`} />
+
+          {/* Seasonal Holiday Corner Badges when active */}
+          <SeasonalFrameCorners theme={seasonalTheme} />
 
           <div className="w-full bg-zinc-950 rounded-xl overflow-hidden border border-amber-300/30 shadow-2xl shadow-black/90 group relative">
             <div className="aspect-video w-full relative bg-zinc-950">
