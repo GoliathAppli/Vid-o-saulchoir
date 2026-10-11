@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { VideoItem, VideoCategory, NewsPhoto, NewsCountdown } from './types/cinema';
+import { VideoItem, VideoCategory, NewsPhoto, NewsCountdown, SeasonalThemeId } from './types/cinema';
+import { getSeasonalTheme, SEASONAL_THEMES } from './utils/seasonalTheme';
 import { storageService } from './services/storageService';
 import { syncManager } from './services/syncManager';
 import { githubService } from './services/githubService';
@@ -16,6 +17,7 @@ import { VideoModal } from './components/VideoModal';
 import { AdminModal } from './components/AdminModal';
 import { AboutModal } from './components/AboutModal';
 import { Footer } from './components/Footer';
+import { SeasonalPageAtmosphere } from './components/CinemaDecorations';
 
 export default function App() {
   // Video catalog state
@@ -33,6 +35,30 @@ export default function App() {
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [selectedVideoModal, setSelectedVideoModal] = useState<VideoItem | null>(null);
   const [editingVideoTarget, setEditingVideoTarget] = useState<VideoItem | null>(null);
+
+  // Page-wide Seasonal Theme state (automatic by date or selected in Admin)
+  const [autoSeasonalTheme, setAutoSeasonalTheme] = useState<SeasonalThemeId>(() =>
+    getSeasonalTheme(new Date())
+  );
+  const [selectedThemeMode, setSelectedThemeMode] = useState<SeasonalThemeId | 'auto'>(() => {
+    try {
+      const saved = localStorage.getItem('saulchoir_seasonal_theme_mode');
+      return (saved as SeasonalThemeId | 'auto') || 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAutoSeasonalTheme(getSeasonalTheme(new Date()));
+    }, 60 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeThemeId: SeasonalThemeId =
+    selectedThemeMode !== 'auto' ? selectedThemeMode : autoSeasonalTheme;
+  const activeTheme = SEASONAL_THEMES[activeThemeId] || SEASONAL_THEMES.default;
 
   // Latest video published -> "Nouvelle publication"
   const { latest } = useMemo(() => {
@@ -238,7 +264,11 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0c10] text-[#e8eaed] selection:bg-amber-500/30 selection:text-white">
+    <div
+      className={`min-h-screen flex flex-col bg-gradient-to-b ${activeTheme.pageBgGradient} text-[#e8eaed] selection:bg-amber-500/30 selection:text-white relative transition-colors duration-700`}
+    >
+      {/* Whole-Page Seasonal Atmosphere (Snowflakes, Garlands, Bats, Blossoms, Fireworks, Confetti, Hearts, Sunbeams) */}
+      <SeasonalPageAtmosphere theme={activeThemeId} />
       
       {/* Top Navigation Bar with Seasonal Title Animations */}
       <Header
@@ -246,9 +276,12 @@ export default function App() {
         onOpenAdmin={() => setIsAdminModalOpen(true)}
         onOpenAbout={() => setIsAboutModalOpen(true)}
         videoCount={videos.length}
+        selectedThemeMode={selectedThemeMode}
+        onThemeModeChange={setSelectedThemeMode}
+        activeThemeId={activeThemeId}
       />
 
-      <main className="flex-1">
+      <main className="flex-1 relative z-10">
         {/* Section 0: "Actualité" (Large uniform photo carousel with 5-second auto-scroll + Visual Countdown, editable in Admin mode) */}
         <NewsCarouselSection
           photos={newsPhotos}
@@ -256,6 +289,7 @@ export default function App() {
           onUpdatePhotos={handleUpdateNewsPhotos}
           countdown={newsCountdown}
           onUpdateCountdown={handleUpdateNewsCountdown}
+          seasonalTheme={activeThemeId}
         />
 
         {/* Section 1: "Nouvelle publication" (The very latest video in spotlight) */}
@@ -265,6 +299,7 @@ export default function App() {
           isAdmin={isAdmin}
           onEditVideo={handleEditVideo}
           onOpenAdmin={() => setIsAdminModalOpen(true)}
+          seasonalTheme={activeThemeId}
         />
 
         {/* Section 2: Categories ("Vidéos d'atelier", "Vidéos avec Vaulx", "Pom's D'or") grouped by Year & Month */}
@@ -274,6 +309,7 @@ export default function App() {
           isAdmin={isAdmin}
           onEditVideo={handleEditVideo}
           onMoveVideosToCategory={handleMoveVideosToCategory}
+          seasonalTheme={activeThemeId}
         />
       </main>
 
