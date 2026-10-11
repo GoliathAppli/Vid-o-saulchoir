@@ -118,22 +118,55 @@ export default function App() {
     setIsAdminModalOpen(true);
   };
 
-  // Auto-sync immediately on mount, every 2 minutes, and whenever the user returns to the tab (visibilitychange / focus)
+  // Auto-sync immediately on mount, on tab focus (e.g. after uploading a video on YouTube), and on interval
   useEffect(() => {
     let isRunning = false;
 
     const runAutoSync = async () => {
       if (isRunning) return;
       isRunning = true;
-      try {
-        const currentConfig = storageService.getConfig();
-        const owner = currentConfig.githubOwner || 'goliathappli';
-        const repo = currentConfig.githubRepo || 'Vid-o-saulchoir';
-        const branch = currentConfig.githubBranch || 'main';
 
-        if (owner && repo) {
+      try {
+        let currentConfig = storageService.getConfig();
+        const hasGitHub = Boolean(currentConfig.githubOwner && currentConfig.githubRepo);
+
+        if (hasGitHub) {
+          // Pull remote vault first so any device or visitor has the permanent OAuth Refresh Token
+          try {
+            const remoteVault = await githubService.pullSyncVault(
+              currentConfig.githubToken,
+              currentConfig.githubOwner,
+              currentConfig.githubRepo,
+              currentConfig.githubBranch || 'main'
+            );
+            if (remoteVault) {
+              currentConfig = storageService.mergeRemoteVault(remoteVault);
+            } else if (
+              currentConfig.githubToken &&
+              (currentConfig.youtubeOAuthClientId || currentConfig.youtubeRefreshToken)
+            ) {
+              // Back up existing local config to the encrypted GitHub vault automatically
+              githubService
+                .pushSyncVault(
+                  currentConfig.githubToken,
+                  currentConfig.githubOwner,
+                  currentConfig.githubRepo,
+                  currentConfig.githubBranch || 'main',
+                  currentConfig
+                )
+                .catch(() => {});
+            }
+          } catch {
+            // ignore
+          }
+
           githubService
-            .pullNewsPhotos(currentConfig.githubToken, owner, repo, branch)
+            .pullNewsPhotos(
+              currentConfig.githubToken,
+              currentConfig.githubOwner,
+              currentConfig.githubRepo,
+              currentConfig.githubBranch || 'main'
+            )
             .then(remotePhotos => {
               if (remotePhotos && remotePhotos.length > 0) {
                 setNewsPhotos(remotePhotos);
@@ -143,7 +176,12 @@ export default function App() {
             .catch(() => {});
 
           githubService
-            .pullNewsCountdown(currentConfig.githubToken, owner, repo, branch)
+            .pullNewsCountdown(
+              currentConfig.githubToken,
+              currentConfig.githubOwner,
+              currentConfig.githubRepo,
+              currentConfig.githubBranch || 'main'
+            )
             .then(remoteCountdown => {
               if (remoteCountdown && remoteCountdown.targetDate !== undefined) {
                 setNewsCountdown(remoteCountdown);
@@ -153,7 +191,17 @@ export default function App() {
             .catch(() => {});
         }
 
-        const res = await syncManager.runFullSync(currentConfig);
+        const hasYouTube = Boolean(
+          currentConfig.youtubeAccessToken ||
+            (currentConfig.youtubeRefreshToken &&
+              currentConfig.youtubeOAuthClientId &&
+              currentConfig.youtubeClientSecret) ||
+            (currentConfig.youtubeApiKey && currentConfig.youtubePlaylistId)
+        );
+
+        if (!hasYouTube && !hasGitHub) return;
+
+        const res = await syncManager.runFullSync(currentConfig, { isAutoBackground: true });
         if (res.videos) {
           setVideos(res.videos);
         }
@@ -165,15 +213,7 @@ export default function App() {
     // Run once immediately on load
     runAutoSync();
 
-    // Also run 3 seconds after load once Google Identity script is ready for silent OAuth token refresh
-    const bootTimer = setTimeout(runAutoSync, 3000);
-
-    // Run every 2 minutes in background
-    const config = storageService.getConfig();
-    const intervalMinutes = Math.max(1, Math.min(5, config.autoSyncIntervalMinutes || 2));
-    const timer = setInterval(runAutoSync, intervalMinutes * 60 * 1000);
-
-    // Run immediately when user comes back from YouTube tab to the site
+    // Also run automatically whenever user returns to this tab (e.g. right after uploading a video on YouTube)
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         runAutoSync();
@@ -182,8 +222,15 @@ export default function App() {
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
+    const config = storageService.getConfig();
+    const intervalMs = Math.max(2, config.autoSyncIntervalMinutes || 5) * 60 * 1000;
+    const timer = setInterval(() => {
+      if (storageService.getConfig().autoSyncEnabled !== false) {
+        runAutoSync();
+      }
+    }, intervalMs);
+
     return () => {
-      clearTimeout(bootTimer);
       clearInterval(timer);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
